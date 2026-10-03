@@ -5,5 +5,7 @@ uv.lock
 /__pycache__/
 .venv/
 
+out/
+
 
 
