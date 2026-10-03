@@ -1,0 +1,6 @@
+Two cars at a four-way intersection controlled by traffic lights, daytime, dry road.
+Car A (white sedan) was driving north on Main Street at about 40 km/h. The light for Main Street was green.
+Car B (black SUV) was driving east on Oak Avenue and approached the intersection at high speed.
+The light for Oak Avenue was red, but Car B did not slow down and entered the intersection.
+Car B's front hit the right side of Car A. Car A did not use its horn or brake before the impact.
+No pedestrians were involved. Both drivers were wearing seat belts.
