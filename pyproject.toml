@@ -1,0 +1,20 @@
+[project]
+name = "accident-intel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "mahmoud-khaled23", email = "mahmoudkhaled1116@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+accident-intel = "accident_intel:main"
+
+[tool.uv.extra-build-dependencies]
+jnius = ["Cython"]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
