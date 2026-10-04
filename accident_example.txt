@@ -1,6 +1,31 @@
-Two cars at a four-way intersection controlled by traffic lights, daytime, dry road.
-Car A (white sedan) was driving north on Main Street at about 40 km/h. The light for Main Street was green.
-Car B (black SUV) was driving east on Oak Avenue and approached the intersection at high speed.
-The light for Oak Avenue was red, but Car B did not slow down and entered the intersection.
-Car B's front hit the right side of Car A. Car A did not use its horn or brake before the impact.
-No pedestrians were involved. Both drivers were wearing seat belts.
+Scene:
+
+The video captures a daytime scene at a signalized urban intersection with multiple lanes in each direction. The intersection has clearly marked lane lines, pedestrian crosswalks, and traffic signals controlling all approaches. Traffic is moderate, with several vehicles waiting and moving through the intersection.
+
+Incident:
+
+At the beginning of the video, a black SUV approaches the intersection from the opposite direction and continues straight through the intersection. At the same time, a silver sedan approaches from the opposite side and enters the intersection intending to turn left.
+
+The traffic signal for both vehicles is green. The black SUV has the right of way because it is proceeding straight through the intersection, while the silver sedan must yield to oncoming traffic before completing its left turn.
+
+The silver sedan begins turning left across the path of the approaching black SUV without waiting for it to pass. The black SUV continues straight at a moderate speed and enters the intersection as the silver sedan crosses its path.
+
+The two vehicles come into conflict within the intersection. The black SUV brakes suddenly, but the silver sedan continues its turn. The front-left portion of the black SUV and the passenger-side front portion of the silver sedan make contact.
+
+Vehicles Involved:
+
+Black SUV: Traveling straight through the intersection in the through lane with a green traffic signal.
+Silver Sedan: Traveling in the opposing direction and attempting to turn left across the path of the black SUV with a green traffic signal.
+Pedestrians: Present near the crosswalk but do not enter the roadway.
+
+Potentially Relevant Facts:
+
+Both vehicles had a green traffic signal.
+The black SUV was proceeding straight.
+The silver sedan was making a left turn.
+The silver sedan crossed the path of the oncoming black SUV.
+The black SUV had no stop or yield sign.
+The collision occurred inside the intersection.
+The exact speed of both vehicles is unknown.
+No evidence indicates that either vehicle was responding to an emergency.
+The pedestrian crossing was not involved in the collision.
