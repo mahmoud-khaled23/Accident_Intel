@@ -1,5 +1,4 @@
 
-uv.lock
 .python-version
 
 /__pycache__/
@@ -8,4 +7,4 @@ uv.lock
 data/
 .qodo
 
-
+outputs/
