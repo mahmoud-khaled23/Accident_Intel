@@ -19,6 +19,10 @@ import re
 import sys
 import time
 from pathlib import Path
+import dotenv
+import os
+
+dotenv.load_dotenv()  # load GROQ_API_KEY from .env if present
 
 # ── make src/ importable when run as a module ─────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -29,7 +33,7 @@ from rag.retrieval.index_and_retrieve import load, retrieve   # noqa: E402
 # 🔑  PUT YOUR GROQ API KEY HERE
 #     Get one free at: https://console.groq.com  (no credit card)
 # ===========================================================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Groq model for both fact-extraction and fault-analysis steps.
 # Available free models: "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"

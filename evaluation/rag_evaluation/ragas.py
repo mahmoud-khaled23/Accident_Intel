@@ -22,12 +22,16 @@ import json
 import sys
 import time
 from pathlib import Path
+import dotenv
+import os
+
+dotenv.load_dotenv()  # load GROQ_API_KEY from .env if present
 
 # ===========================================================================
 # 🔑  PUT YOUR FREE GROQ API KEY HERE
 #     Get one at: https://console.groq.com  (no credit card needed)
 # ===========================================================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Free models on Groq (as of Oct 2025) — pick one:
 #   "llama-3.1-8b-instant"          ← fastest  (8B)
