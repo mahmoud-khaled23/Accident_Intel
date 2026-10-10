@@ -6,23 +6,37 @@ Accident description  ->  structured facts + search queries (LLM call 1)
                       ->  fault analysis based ONLY on those sections (LLM call 2)
 
 Setup:
-    pip install anthropic
-    set ANTHROPIC_API_KEY=your_key          (Windows)   |   export ANTHROPIC_API_KEY=your_key  (Mac/Linux)
+    pip install openai
+    Set GROQ_API_KEY below or pass --api-key
 
 Usage:
-    python analyze_accident.py --out ./out --file accident_example.txt
-    python analyze_accident.py --out ./out --text "Car A ran a red light and hit car B ..." --lang ar
+    python -m src.rag.retrieval.analyze_accident --out src/rag/chunking/out --file accident_example.txt
+    python -m src.rag.retrieval.analyze_accident --out src/rag/chunking/out --text "Car A ran a red light..." --lang ar
 """
 import argparse
 import json
 import re
+import sys
+import time
 from pathlib import Path
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-from index_and_retrieve import load, retrieve
 
-DEFAULT_MODEL = "Qwen/Qwen3-8B"
-MAX_WORDS_PER_LAW = 2500      # safety cap for very long sections
+# ── make src/ importable when run as a module ─────────────────────────────────
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from rag.retrieval.index_and_retrieve import load, retrieve   # noqa: E402
+
+# ===========================================================================
+# 🔑  PUT YOUR GROQ API KEY HERE
+#     Get one free at: https://console.groq.com  (no credit card)
+# ===========================================================================
+GROQ_API_KEY = "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"
+
+# Groq model for both fact-extraction and fault-analysis steps.
+# Available free models: "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+MAX_WORDS_PER_LAW = 4000      # safety cap for very long sections
 
 EXTRACT_SYSTEM = """You are a traffic-accident analyst. Read the accident description (it may be in
 any language) and return ONLY a JSON object, no markdown, with these keys:
@@ -90,64 +104,34 @@ def build_catalog(parents):
     return "\n".join(f"{sec} | {title[:110]}" for sec, title in rows)
 
 
-def load_llm(model_name):
-    print(f"Loading Hugging Face model: {model_name}")
+def _call_groq(system: str, user: str, model: str, api_key: str,
+               max_tokens: int = 2000, retries: int = 5) -> str:
+    """Call Groq API (OpenAI-compatible). Retries on 503/429 errors."""
+    from openai import OpenAI, InternalServerError, RateLimitError
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        trust_remote_code=True
-    )
+    client = OpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
+    messages = [{"role": "system", "content": system},
+                {"role": "user",   "content": user}]
 
-    quant_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
-)
+    for attempt in range(1, retries + 1):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                max_tokens=max_tokens,
+                messages=messages,
+            )
+            if resp.choices and resp.choices[0].message.content:
+                return resp.choices[0].message.content.strip()
+            wait = 2 ** attempt
+            print(f"  ⚠ Empty response (attempt {attempt}/{retries}), retrying in {wait}s …")
+            time.sleep(wait)
+        except (InternalServerError, RateLimitError) as e:
+            wait = 2 ** attempt
+            print(f"  ⚠ Groq busy (attempt {attempt}/{retries}), retrying in {wait}s … ({e})")
+            time.sleep(wait)
 
-    model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    quantization_config=quant_config,
-    device_map="auto",
-    trust_remote_code=True,
-)
-
-    return tokenizer, model
-
-
-def call_llm(tokenizer, model, system, user, max_tokens=2000):
-
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt"
-    ).to(model.device)
-
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_tokens,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
-        )
-
-    generated = outputs[0][inputs["input_ids"].shape[1]:]
-
-    return tokenizer.decode(
-        generated,
-        skip_special_tokens=True
-    ).strip()
+    raise RuntimeError(f"Groq failed after {retries} retries")
 
 def parse_json(text):
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
@@ -172,7 +156,10 @@ def main():
     ap.add_argument("--file", help="text file with the accident description")
     ap.add_argument("--text", help="accident description given directly")
     ap.add_argument("--lang", default="en", choices=["en", "ar"], help="language of the final answer")
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--model", default=DEFAULT_MODEL,
+                    help="Groq model id (default: %(default)s)")
+    ap.add_argument("--api-key", default=None,
+                    help="Groq API key (overrides the GROQ_API_KEY constant in this file)")
     ap.add_argument("--top-k", type=int, default=8, help="number of law sections sent to the LLM")
     ap.add_argument("--no-title-routing", action="store_true",
                     help="do not let the LLM pick sections from the title catalog (vector search only)")
@@ -183,26 +170,33 @@ def main():
 
     if not (a.file or a.text):
         ap.error("give --file or --text")
+
+    # resolve API key
+    api_key = a.api_key or GROQ_API_KEY
+    if api_key == "YOUR_GROQ_API_KEY_HERE":
+        ap.error(
+            "Groq API key not set!\n"
+            "Edit analyze_accident.py and replace 'YOUR_GROQ_API_KEY_HERE',\n"
+            "or pass --api-key YOUR_KEY.\n"
+            "Free key: https://console.groq.com"
+        )
+
     description = a.text or Path(a.file).read_text(encoding="utf-8")
-    tokenizer, model = load_llm(a.model)
+    model = a.model
 
     parents, _ = load(a.out)
 
     # 1) facts + queries + sections picked by title
-    print("[1/3] Extracting facts, search queries and relevant sections ...")
+    print(f"[1/3] Extracting facts, search queries and relevant sections (model: {model}) …")
     if a.no_title_routing:
         user_msg = description
     else:
         user_msg = (f"SECTION CATALOG (number | title):\n{build_catalog(parents)}\n\n"
                     f"ACCIDENT DESCRIPTION:\n{description}")
-    facts = parse_json(
-    call_llm(
-        tokenizer,
-        model,
-        EXTRACT_SYSTEM,
-        user_msg
-    )
-)
+
+    facts_raw = _call_groq(EXTRACT_SYSTEM, user_msg, model=model, api_key=api_key, max_tokens=1500)
+    facts = parse_json(facts_raw)
+
     queries = facts.pop("queries", [])
     picked_raw = [] if a.no_title_routing else facts.pop("relevant_sections", [])
     facts.pop("relevant_sections", None)
@@ -210,7 +204,7 @@ def main():
         raise SystemExit("The model returned no search queries.")
     print("Queries:", *[f"  - {q}" for q in queries], sep="\n")
 
-    # sections the LLM picked from the catalog (only ones that really exist and are searchable)
+    # sections the LLM picked from the catalog
     anchors, seen = [], set()
     for x in picked_raw:
         pid = f"VTL-{str(x).strip().lower().replace('section', '').replace('§', '').strip()}"
@@ -222,8 +216,8 @@ def main():
             anchors.append(q)
     print("Picked by title:", [p["id"] for p in anchors] or "none")
 
-    # 2) retrieval: LLM-picked sections first, vector search fills the remaining slots
-    print("\n[2/3] Retrieving laws ...")
+    # 2) retrieval
+    print("\n[2/3] Retrieving laws …")
     n_anchor = min(len(anchors), max(1, a.top_k - 2))
     laws = anchors[:n_anchor]
     for p in retrieve(queries, a.out, top_k=a.top_k, expand_refs=True, rerank=a.rerank):
@@ -237,19 +231,19 @@ def main():
         print("\n" + format_laws(laws))
 
     # 3) analysis
-    print("\n[3/3] Analysing fault ...\n")
+    print("\n[3/3] Analysing fault …\n")
     language = "Arabic" if a.lang == "ar" else "English"
-    answer = call_llm(
-    tokenizer,
-    model,
-    ANALYZE_SYSTEM,
-    ANALYZE_USER.format(
-        facts=json.dumps(facts, ensure_ascii=False, indent=2),
-        laws=format_laws(laws),
-        language=language
-    ),
-    max_tokens=3000,
-)
+    answer = _call_groq(
+        ANALYZE_SYSTEM,
+        ANALYZE_USER.format(
+            facts=json.dumps(facts, ensure_ascii=False, indent=2),
+            laws=format_laws(laws),
+            language=language,
+        ),
+        model=model,
+        api_key=api_key,
+        max_tokens=3000,
+    )
     print(answer)
 
     if a.save:

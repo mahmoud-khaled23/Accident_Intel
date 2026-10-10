@@ -19,7 +19,7 @@ Usage:
 From another script (for example your analyze_accident.py):
     from report_retrieval import retrieve_for_report
     laws = retrieve_for_report(description, "./out", extra_queries=queries, top_k=8)
-"""
+
 import argparse
 import json
 import re
