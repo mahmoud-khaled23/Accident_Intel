@@ -1,0 +1,8 @@
+torch
+torchvision
+transformers>=4.45
+accelerate
+qwen-vl-utils
+decord
+opencv-python
+pillow
