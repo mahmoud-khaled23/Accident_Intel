@@ -29,3 +29,17 @@ qwen-vl-utils==0.0.14
 decord==0.6.0
 opencv-python==4.14.0
 pillow==12.3.0
+
+
+#car_damage_cost
+ultralytics
+opencv-python
+numpy
+pydantic>=2
+httpx
+python-dotenv
+huggingface_hub
+google-genai
+ddgs
+streamlit
+pandas
