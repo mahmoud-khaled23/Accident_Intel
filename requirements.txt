@@ -19,3 +19,13 @@ sentence_transformers==6.1.0
 thread==2.0.6
 urllib3_secure_extra==0.1.0
 # xmlrpclib==1.0.1
+
+# VLM
+torch==2.14.1
+torchvision==0.29.1
+transformers>=4.45
+accelerate==1.15.0
+qwen-vl-utils==0.0.14
+decord==0.6.0
+opencv-python==4.14.0
+pillow==12.3.0
