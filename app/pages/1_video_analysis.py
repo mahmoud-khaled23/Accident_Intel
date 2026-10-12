@@ -87,6 +87,7 @@ with col_left:
     prompt_mode = st.radio('Prompt mode', ['Report', 'JSON', 'Custom'])
     model_id = st.text_input('Model ID', value='Qwen/Qwen2-VL-7B-Instruct')
     max_new_tokens = st.number_input('Max new tokens', min_value=100, max_value=4000, value=700)
+    with_tracking = st.checkbox('Run Detector & Tracker first (Grounds VLM to prevent hallucinations)', value=False)
 
 custom_prompt = None
 if prompt_mode == 'Custom':
@@ -118,6 +119,35 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
 
     model, processor = result
 
+    # Optional Tracking Pre-processing
+    tracking_summary = None
+    video_for_analysis = tmp_video
+    if with_tracking:
+        with st.spinner('Running vehicle detector & tracker (YOLO + BoT-SORT)…'):
+            try:
+                from vehicle_tracking.tracker import process_video
+                from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+                import cv2
+
+                cap = cv2.VideoCapture(tmp_video)
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                cap.release()
+
+                tracked_video = str(Path(tmp_dir) / 'tracked.mp4')
+                tracked_json = str(Path(tmp_dir) / 'trajectories.json')
+
+                trajectories = process_video(
+                    input_path=tmp_video,
+                    output_video=tracked_video,
+                    output_json=tracked_json,
+                )
+                candidates = identify_accident_candidates(trajectories)
+                tracking_summary = format_tracking_summary(trajectories, fps=fps, candidates=candidates)
+                video_for_analysis = tracked_video
+                st.info(f'Vehicle Tracking Complete: {len(trajectories)} road users tracked.')
+            except Exception as trk_err:
+                st.warning(f'Vehicle tracking failed: {trk_err}. Continuing with standard VLM.')
+
     # Build prompt
     try:
         from VLM.analyze_video import get_video_duration, build_prompt, analyze
@@ -132,16 +162,17 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
                 prompt_mode='json' if prompt_mode == 'JSON' else 'report',
                 n_frames=n_frames,
             )
-            prompt = build_prompt(args_ns, duration_s)
+            prompt = build_prompt(args_ns, duration_s, tracking_summary=tracking_summary)
 
-        with st.spinner('Analysing video…'):
-            report = analyze(model, processor, tmp_video, prompt, n_frames, int(max_new_tokens))
+        with st.spinner('Analysing video with VLM…'):
+            report = analyze(model, processor, video_for_analysis, prompt, n_frames, int(max_new_tokens))
 
         st.session_state['vlm_report'] = report
         st.session_state['vlm_video_name'] = uploaded.name
 
     except Exception as exc:
         st.error(f'Analysis failed: {exc}')
+
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.get('vlm_report'):

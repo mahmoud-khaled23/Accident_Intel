@@ -49,6 +49,19 @@ try:
 except ImportError:
     from src.VLM.prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
 
+# Optional tracking integration
+try:
+    from vehicle_tracking.tracker import process_video
+    from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+except ImportError:
+    try:
+        from src.vehicle_tracking.tracker import process_video
+        from src.vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+    except ImportError:
+        process_video = None
+        format_tracking_summary = None
+        identify_accident_candidates = None
+
 DEFAULT_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"
 DEFAULT_MIN_PIXELS = 128 * 28 * 28
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
@@ -83,6 +96,18 @@ def parse_args():
     p.add_argument("--cache-dir", default=None,
                    help="Custom Hugging Face cache directory (recommended for persistent disk on Lightning AI)")
     p.add_argument("-o", "--output", help="Optional file to save the report")
+
+    # Tracking & Detector pre-processing flags
+    p.add_argument("--with-tracking", action="store_true",
+                   help="Run YOLO detection & BoT-SORT tracking before VLM analysis to ground the model.")
+    p.add_argument("--trajectories", help="Path to precomputed trajectories.json file (skips re-running tracker).")
+    p.add_argument("--use-annotated-video", action="store_true",
+                   help="Feed the tracker's annotated video (with bounding boxes, track IDs, traces) into the VLM.")
+    p.add_argument("--yolo-model", default="yolo11x.pt",
+                   help="YOLO model path or weights for tracking (default: yolo11x.pt).")
+    p.add_argument("--repetition-penalty", type=float, default=1.15,
+                   help="Repetition penalty for VLM generation (default: 1.15 to prevent repetitive loops).")
+
     args = p.parse_args()
 
     if args.n_frames < 1:
@@ -174,25 +199,54 @@ def load_model(
     return model, processor
 
 
-def get_video_duration(video_path: str) -> float:
+def get_video_info(video_path: str):
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
     cap.release()
     if fps <= 0 or total_frames <= 0:
         raise ValueError(f"Could not read video metadata. Check path: {video_path}")
-    return total_frames / fps
+    return total_frames / fps, fps
 
 
-def build_prompt(args, duration_s: float) -> str:
+def get_video_duration(video_path: str) -> float:
+    duration_s, _ = get_video_info(video_path)
+    return duration_s
+
+
+def build_prompt(args, duration_s: float, tracking_summary: str | None = None) -> str:
     if args.prompt_file:
-        return Path(args.prompt_file).read_text(encoding="utf-8")
-    if args.prompt_mode == "json":
-        return build_accident_prompt(args.n_frames, duration_s)
-    return TRAFFIC_ANALYSIS_PROMPT
+        base_prompt = Path(args.prompt_file).read_text(encoding="utf-8")
+    elif args.prompt_mode == "json":
+        base_prompt = build_accident_prompt(args.n_frames, duration_s)
+    else:
+        base_prompt = TRAFFIC_ANALYSIS_PROMPT
+
+    if tracking_summary:
+        telemetry_block = (
+            "======================================================================\n"
+            "GROUND TRUTH TELEMETRY FROM YOLO DETECTOR & BoT-SORT TRACKER:\n"
+            f"{tracking_summary}\n"
+            "======================================================================\n"
+            "STRICT GROUNDING INSTRUCTIONS:\n"
+            "- Anchor your observations strictly to the detected road users and Track IDs listed above.\n"
+            "- Do NOT invent vehicles or road users not captured in the tracking telemetry.\n"
+            "- Pay special attention to the candidate timestamps, overlaps, and decelerations flagged above.\n"
+            "- Do NOT repeat identical observations or loop in a repetitive cycle.\n\n"
+        )
+        return telemetry_block + base_prompt
+    return base_prompt
 
 
-def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_new_tokens: int) -> str:
+def analyze(
+    model,
+    processor,
+    video_path: str,
+    prompt: str,
+    n_frames: int,
+    max_new_tokens: int,
+    repetition_penalty: float = 1.15,
+) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
@@ -220,7 +274,12 @@ def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_n
     inputs = inputs.to(device)
 
     with torch.inference_mode():
-        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            repetition_penalty=repetition_penalty,
+        )
 
     trimmed = [out[len(inp):] for inp, out in zip(inputs.input_ids, generated_ids)]
     return processor.batch_decode(
@@ -230,9 +289,54 @@ def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_n
 
 def main():
     args = parse_args()
-    duration_s = get_video_duration(args.video)
-    prompt = build_prompt(args, duration_s)
+    duration_s, fps = get_video_info(args.video)
 
+    tracking_summary = None
+    video_for_vlm = args.video
+
+    # ── 1. Optional Tracking Pre-processing ─────────────────────────────────
+    if args.with_tracking or args.trajectories:
+        trajectories = None
+        if args.trajectories:
+            print(f"[Tracker] Loading precomputed trajectories from {args.trajectories}...")
+            import json
+            with open(args.trajectories, "r", encoding="utf-8") as f:
+                trajectories = json.load(f)
+        else:
+            if process_video is None:
+                raise ImportError(
+                    "Vehicle tracking dependencies not installed. Run: pip install ultralytics supervision"
+                )
+            video_p = Path(args.video)
+            out_tracked_video = video_p.parent / f"{video_p.stem}_tracked.mp4"
+            out_trajectories = video_p.parent / f"{video_p.stem}_trajectories.json"
+
+            print(f"[Tracker] Running YOLO ({args.yolo_model}) + BoT-SORT detector & tracker on {args.video}...")
+            trajectories = process_video(
+                input_path=str(video_p),
+                output_video=str(out_tracked_video),
+                output_json=str(out_trajectories),
+                model_path=args.yolo_model,
+            )
+            print(f"[Tracker] Annotated video saved to: {out_tracked_video}")
+            print(f"[Tracker] Trajectories saved to: {out_trajectories}")
+
+            if args.use_annotated_video:
+                video_for_vlm = str(out_tracked_video)
+                print(f"[Tracker] Using annotated video (with bounding boxes & track IDs) as VLM input.")
+
+        if format_tracking_summary is not None and trajectories is not None:
+            candidates = identify_accident_candidates(trajectories) if identify_accident_candidates else None
+            tracking_summary = format_tracking_summary(trajectories, fps=fps, candidates=candidates)
+            print("-" * 70)
+            print("Ground Truth Telemetry from Tracker:")
+            print(tracking_summary)
+            print("-" * 70)
+
+    # ── 2. Build Grounded Prompt ──────────────────────────────────────────
+    prompt = build_prompt(args, duration_s, tracking_summary=tracking_summary)
+
+    # ── 3. Load & Run VLM ─────────────────────────────────────────────────
     model, processor = load_model(
         model_id=args.model_id,
         torch_dtype=args.torch_dtype,
@@ -243,10 +347,20 @@ def main():
         attn_implementation=args.attn_implementation,
         cache_dir=args.cache_dir,
     )
-    report = analyze(model, processor, args.video, prompt, args.n_frames, args.max_new_tokens)
+    report = analyze(
+        model,
+        processor,
+        video_for_vlm,
+        prompt,
+        args.n_frames,
+        args.max_new_tokens,
+        repetition_penalty=args.repetition_penalty,
+    )
 
     print("-" * 70)
     print(f"Prompt mode: {args.prompt_mode} | Video duration: {duration_s:.2f}s | Requested frames: {args.n_frames}")
+    if tracking_summary:
+        print("[Tracking Telemetry Grounding: ENABLED]")
     print(report)
     print("-" * 70)
 
@@ -257,4 +371,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

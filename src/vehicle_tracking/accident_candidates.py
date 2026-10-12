@@ -250,3 +250,61 @@ def identify_accident_candidates(
     )
 
     return candidates
+
+
+def format_tracking_summary(trajectories, fps=30.0, candidates=None):
+    """Format vehicle trajectories and collision candidate alerts into a concise
+
+    ground truth summary for prompting Vision-Language Models (VLMs).
+    """
+    if not trajectories:
+        return "No vehicles were detected or tracked by the object detector."
+
+    if candidates is None:
+        candidates = identify_accident_candidates(trajectories)
+
+    lines = []
+    lines.append(f"DETECTED ROAD USERS & TRACKING TELEMETRY (Total: {len(trajectories)} tracked):")
+
+    for vid, data in sorted(
+        trajectories.items(),
+        key=lambda x: int(x[0]) if str(x[0]).isdigit() else str(x[0])
+    ):
+        cls_name = data.get("class", "vehicle")
+        frames = sorted(int(f) for f in data.get("trajectory", {}).keys())
+        if not frames:
+            continue
+        start_t = frames[0] / fps if fps > 0 else 0.0
+        end_t = frames[-1] / fps if fps > 0 else 0.0
+        start_center = data["trajectory"][str(frames[0])]["center"]
+        end_center = data["trajectory"][str(frames[-1])]["center"]
+
+        # Check deceleration
+        speeds = calculate_speeds(data["trajectory"])
+        decel = detect_abrupt_deceleration(speeds)
+        decel_str = ""
+        if decel["detected"] and decel["frame"] is not None:
+            decel_t = decel["frame"] / fps if fps > 0 else 0.0
+            decel_str = f" | Sudden deceleration at {decel_t:.2f}s (-{decel['relative_drop']*100:.0f}%)"
+
+        lines.append(
+            f"- Vehicle ID {vid} ({cls_name}): visible from {start_t:.2f}s to {end_t:.2f}s "
+            f"(frames {frames[0]}-{frames[-1]}), moved from ({start_center[0]:.0f}, {start_center[1]:.0f}) "
+            f"to ({end_center[0]:.0f}, {end_center[1]:.0f}){decel_str}"
+        )
+
+    lines.append("\nTRACKING COLLISION ALERTS & CANDIDATE INTERACTIONS:")
+    if candidates:
+        for idx, cand in enumerate(candidates[:3], 1):
+            v_pair = " and ".join(f"Vehicle ID {v}" for v in cand["vehicle_ids"])
+            overlap_t = f"{cand['overlap_frame'] / fps:.2f}s" if (cand['overlap_frame'] is not None and fps > 0) else "N/A"
+            evidence_str = ", ".join(cand["evidence"]) if cand.get("evidence") else "trajectory proximity"
+            lines.append(
+                f"  Alert {idx}: {v_pair} | Suspicion Score: {cand['suspicion_score']} | "
+                f"Peak Box Overlap at {overlap_t} (IoU: {cand['max_iou']}) | Evidence: {evidence_str}"
+            )
+    else:
+        lines.append("  No high-probability collisions or bounding-box overlaps detected by the tracker.")
+
+    return "\n".join(lines)
+
