@@ -43,3 +43,8 @@ google-genai
 ddgs
 streamlit
 pandas
+
+#vehical tracking 
+ultralytics
+opencv-python
+supervision
