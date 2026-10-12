@@ -1,9 +1,0 @@
-ultralytics
-opencv-python
-numpy
-pydantic>=2
-httpx
-python-dotenv
-huggingface_hub
-google-genai
-ddgs

@@ -100,6 +100,7 @@ def _flatten(obj, key=""):
     elif obj is not None and str(obj).strip():
         lines.append(f"{key}: {obj}" if key else str(obj))
     return lines
+"""
 
 
 def json_to_text(obj):

@@ -4,21 +4,22 @@
 **/__pycache__
 .venv/
 .env
-.env.*
+
+
+**.pyc
 
 data/
 .qodo
 
+.agents
+
 outputs/
 
-Accident_Intel\src\Car_damage_cost\.env
 Accident_Intel\src\Car_damage_cost\weights/*
 !Accident_Intel\src\Car_damage_cost\weights/.gitkeep
 !Accident_Intel\src\Car_damage_cost\weights\damage_segmentation.pt
 !Accident_Intel\src\Car_damage_cost\weights\parts_segmentation.pt
 Accident_Intel\src\Car_damage_cost\debug_out/
-Accident_Intel\src\Car_damage_cost\__pycache__/
-Accident_Intel\src\Car_damage_cost\*.pyc
 Accident_Intel\src\Car_damage_cost\report.json
 Accident_Intel\src\Car_damage_cost\cost.json
 Accident_Intel\src\Car_damage_cost\data\price_cache.json
