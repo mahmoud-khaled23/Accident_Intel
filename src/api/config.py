@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     vlm_max_tokens: int = 700
     vlm_mock: bool = True
     tracking_mock: bool = True
-    reasoning_mock: bool = False
+    reasoning_mock: bool = True
     rag_mock: bool = False
     damage_mock: bool = True
     rag_out_dir: Path = Path("out")

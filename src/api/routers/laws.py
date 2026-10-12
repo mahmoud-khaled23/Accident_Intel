@@ -35,14 +35,13 @@ def search_laws(
 
 @router.get("/{section_id}", response_model=LawResult)
 def get_law(section_id: str, settings=Depends(get_settings)):
-    raw = law_service.retrieve_laws(section_id, str(settings.rag_out_dir), settings)
-    for item in raw:
-        if item.get("section_id", "") == section_id or item.get("section_id", "").endswith(section_id):
-            return LawResult(
-                section_id=item["section_id"],
-                title=item.get("title", ""),
-                content=item.get("content", ""),
-                score=float(item.get("score") or 0.0),
-                metadata=item.get("metadata", {}),
-            )
-    raise HTTPException(status_code=404, detail=f"Law section '{section_id}' not found")
+    item = law_service.get_law_by_id(section_id, str(settings.rag_out_dir), settings)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"Law section '{section_id}' not found")
+    return LawResult(
+        section_id=item["section_id"],
+        title=item.get("title", ""),
+        content=item.get("content", ""),
+        score=float(item.get("score") or 0.0),
+        metadata=item.get("metadata", {}),
+    )

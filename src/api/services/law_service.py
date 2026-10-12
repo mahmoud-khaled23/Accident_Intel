@@ -47,6 +47,9 @@ _MOCK_LAWS = [
     },
 ]
 
+# Build a direct-lookup index from the mock list so get_law_by_id is O(1).
+_MOCK_LAWS_INDEX: dict[str, dict] = {item["section_id"]: item for item in _MOCK_LAWS}
+
 
 def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
     """Retrieve relevant traffic laws for the given accident description.
@@ -87,3 +90,24 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
             }
         )
     return results
+
+
+def get_law_by_id(section_id: str, out_dir: str, settings) -> dict | None:
+    """Return a single law entry by its section ID, or None if not found.
+
+    In mock mode this is a direct dict lookup against the in-memory index.
+    In real RAG mode a semantic search is used as a best-effort fallback because
+    the RAG backend does not expose a direct-by-ID retrieval API; the caller
+    should treat a None return as a definitive 404 only in mock mode.
+    """
+    if settings.rag_mock:
+        return _MOCK_LAWS_INDEX.get(section_id)
+
+    # Real RAG: perform a similarity search and look for an exact section_id match
+    # in the returned results.  This is inherently unreliable for opaque IDs.
+    results = retrieve_laws(section_id, out_dir, settings)
+    for item in results:
+        sid = item.get("section_id", "")
+        if sid == section_id or sid.endswith(section_id):
+            return item
+    return None

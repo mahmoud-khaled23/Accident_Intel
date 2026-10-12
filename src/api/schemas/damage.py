@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DamageCreate(BaseModel):
@@ -14,7 +14,7 @@ class DamageCreate(BaseModel):
 class DamageResponse(BaseModel):
     id: str
     status: str
-    vehicle_info: dict = {}
-    images: list[str] = []
+    vehicle_info: dict = Field(default_factory=dict)
+    images: list[str] = Field(default_factory=list)
     cost_report: dict | None = None
     created_at: str = ""
