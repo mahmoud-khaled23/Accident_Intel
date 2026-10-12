@@ -8,7 +8,7 @@ import torch
 
 LIBS = [
     "torch", "torchvision", "torchaudio", "transformers", "accelerate",
-    "qwen-vl-utils", "decord", "numpy", "pillow", "huggingface-hub",
+    "qwen-vl-utils", "av", "decord", "numpy", "pillow", "huggingface-hub",
     "tokenizers", "safetensors", "opencv-python", "opencv-python-headless",
     "bitsandbytes", "flash-attn",
 ]
