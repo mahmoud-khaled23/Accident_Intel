@@ -9,8 +9,13 @@ Examples:
     python analyze_video.py --video clip_07.mp4 --prompt-file my_prompt.txt -o report.txt
 """
 import argparse
+import os
 from pathlib import Path
 import sys
+
+# Prevent Transformers async weight-loading deadlock on cloud/NFS file systems (Lightning AI)
+os.environ.setdefault("HF_DEACTIVATE_ASYNC_LOAD", "1")
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 # Support running directly or from repository root
 _CURRENT_DIR = Path(__file__).resolve().parent
