@@ -19,8 +19,12 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 # Support running directly or from repository root
 _CURRENT_DIR = Path(__file__).resolve().parent
-if str(_CURRENT_DIR) not in sys.path:
-    sys.path.insert(0, str(_CURRENT_DIR))
+_SRC_DIR = _CURRENT_DIR.parent
+_REPO_ROOT = _SRC_DIR.parent
+
+for _p in [str(_CURRENT_DIR), str(_SRC_DIR), str(_REPO_ROOT)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import cv2
 import torch
@@ -50,17 +54,20 @@ except ImportError:
     from src.VLM.prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
 
 # Optional tracking integration
+_TRACKING_IMPORT_ERR = None
 try:
     from vehicle_tracking.tracker import process_video
     from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
-except ImportError:
+except Exception as _e:
     try:
         from src.vehicle_tracking.tracker import process_video
         from src.vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
-    except ImportError:
+    except Exception as _e2:
         process_video = None
         format_tracking_summary = None
         identify_accident_candidates = None
+        _TRACKING_IMPORT_ERR = _e2
+
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"
 DEFAULT_MIN_PIXELS = 128 * 28 * 28
@@ -305,9 +312,11 @@ def main():
         else:
             if process_video is None:
                 raise ImportError(
-                    "Vehicle tracking dependencies not installed. Run: pip install ultralytics supervision"
+                    f"Vehicle tracking module could not be loaded ({_TRACKING_IMPORT_ERR}). "
+                    "Run: pip install ultralytics supervision"
                 )
             video_p = Path(args.video)
+
             out_tracked_video = video_p.parent / f"{video_p.stem}_tracked.mp4"
             out_trajectories = video_p.parent / f"{video_p.stem}_trajectories.json"
 
