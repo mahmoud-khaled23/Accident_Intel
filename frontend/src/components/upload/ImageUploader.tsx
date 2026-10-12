@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type ChangeEvent } from 'react';
+import { useRef, useState, useEffect, useMemo, type DragEvent, type ChangeEvent } from 'react';
 import { UploadCloud, X, ImageIcon, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -82,6 +82,10 @@ export function ImageUploader({ files, onFilesChange }: ImageUploaderProps) {
     onFilesChange(next);
   }
 
+  // Create blob URLs once per files array; revoke stale URLs on cleanup
+  const blobUrls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => { blobUrls.forEach((url) => URL.revokeObjectURL(url)); }, [blobUrls]);
+
   return (
     <div className="space-y-4">
       {/* Drop zone */}
@@ -145,7 +149,7 @@ export function ImageUploader({ files, onFilesChange }: ImageUploaderProps) {
           {files.map((file, idx) => (
             <div key={idx} className="relative group rounded-lg overflow-hidden border border-[#1e2d45] bg-[#0d1525]">
               <img
-                src={URL.createObjectURL(file)}
+                src={blobUrls[idx]}
                 alt={`Preview ${idx + 1}`}
                 className="w-full aspect-square object-cover"
               />

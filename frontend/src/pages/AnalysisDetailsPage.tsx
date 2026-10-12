@@ -501,7 +501,7 @@ function OverviewTab({ record }: OverviewTabProps) {
 interface FullReportTabProps {
   record: AccidentRecord;
   laws: TrafficLaw[];
-  reportRef: React.RefObject<HTMLDivElement | null>;
+  reportRef: React.RefObject<HTMLDivElement>;
   onDownloadPDF: () => void;
   onCopySummary: () => void;
   onNavigateBack: () => void;
@@ -544,8 +544,7 @@ function FullReportTab({
       </div>
 
       {/* Printable report body */}
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <div ref={reportRef as any} className="space-y-6">
+      <div ref={reportRef} className="space-y-6">
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           <DemoBadge />
           <span>This report is generated from mock/demo data for prototype purposes only.</span>

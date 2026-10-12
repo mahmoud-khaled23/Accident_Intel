@@ -79,6 +79,9 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(() => getSettings());
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [displayName, setDisplayName] = useState<string>(
+    () => getSettings().displayName ?? 'Demo User',
+  );
 
   // Per-section saved indicators
   const profileSaved = useSavedIndicator();
@@ -119,7 +122,7 @@ export function SettingsPage() {
         <Section
           icon={<User className="h-4 w-4" />}
           title="Profile"
-          onSave={() => saveSection({}, profileSaved)}
+          onSave={() => saveSection({ displayName }, profileSaved)}
           saved={profileSaved.saved}
         >
           <div className="flex items-center gap-4">
@@ -127,13 +130,18 @@ export function SettingsPage() {
               U
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-slate-200">Demo User</p>
+              <p className="text-sm font-medium text-slate-200">{displayName || 'Demo User'}</p>
               <p className="text-xs text-slate-500">user@example.com</p>
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="displayName">Display Name</Label>
-            <Input id="displayName" placeholder="Your display name" defaultValue="Demo User" />
+            <Input
+              id="displayName"
+              placeholder="Your display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="email">Email (read-only)</Label>

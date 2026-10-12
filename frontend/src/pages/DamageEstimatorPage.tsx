@@ -337,13 +337,6 @@ export function DamageEstimatorPage() {
               onRetry={() => {
                 setRecord(null);
                 setError(null);
-                setLoading(true);
-                void uploadDamageImages(imageFiles, vehicleInfo as VehicleInfo)
-                  .then(setRecord)
-                  .catch((err) =>
-                    setError(err instanceof Error ? err.message : 'Assessment failed.'),
-                  )
-                  .finally(() => setLoading(false));
               }}
             />
           );

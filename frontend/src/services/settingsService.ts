@@ -26,6 +26,8 @@ export interface Settings {
   autoSave: boolean;
   /** Preferred report export format */
   reportFormat: 'pdf' | 'markdown';
+  /** User display name */
+  displayName: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -38,6 +40,7 @@ const DEFAULT_SETTINGS: Settings = {
   notificationsEnabled: true,
   autoSave: true,
   reportFormat: 'pdf',
+  displayName: 'Demo User',
 };
 
 // ---------------------------------------------------------------------------
