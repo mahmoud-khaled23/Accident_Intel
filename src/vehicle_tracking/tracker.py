@@ -133,25 +133,37 @@ def process_video(
                         "box": [x1, y1, x2, y2],
                     }
 
-            labels = []
-            if detections.tracker_id is not None:
-                for class_id, tracker_id in zip(
-                    detections.class_id, detections.tracker_id
-                ):
-                    labels.append(f"{model.names[class_id]} ID:{tracker_id}")
-
             annotated_frame = frame.copy()
-            # Traces need tracker IDs; with none present there is nothing to draw.
-            if detections.tracker_id is not None:
-                annotated_frame = trace_annotator.annotate(
+            if len(detections) > 0:
+                has_tracker = (
+                    detections.tracker_id is not None
+                    and len(detections.tracker_id) == len(detections)
+                )
+
+                labels = []
+                for idx in range(len(detections)):
+                    cls_id = int(detections.class_id[idx])
+                    cls_name = (
+                        model.names[cls_id]
+                        if hasattr(model, "names") and cls_id in model.names
+                        else f"class_{cls_id}"
+                    )
+                    if has_tracker and detections.tracker_id[idx] is not None:
+                        labels.append(f"{cls_name} ID:{detections.tracker_id[idx]}")
+                    else:
+                        labels.append(cls_name)
+
+                # Traces need valid tracker IDs
+                if has_tracker:
+                    annotated_frame = trace_annotator.annotate(
+                        scene=annotated_frame, detections=detections
+                    )
+                annotated_frame = box_annotator.annotate(
                     scene=annotated_frame, detections=detections
                 )
-            annotated_frame = box_annotator.annotate(
-                scene=annotated_frame, detections=detections
-            )
-            annotated_frame = label_annotator.annotate(
-                scene=annotated_frame, detections=detections, labels=labels
-            )
+                annotated_frame = label_annotator.annotate(
+                    scene=annotated_frame, detections=detections, labels=labels
+                )
 
             out.write(annotated_frame)
             frame_idx += 1
