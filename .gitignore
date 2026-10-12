@@ -9,6 +9,8 @@
 data/
 .qodo
 
+.agents
+
 outputs/
 
 Accident_Intel\src\Car_damage_cost\.env
