@@ -43,10 +43,7 @@ python download_weights.py
 Launch the app in a separate terminal from the project root:
 """)
 
-_run_cmd = (
-    'cd /home/ma7moud-5aled/Projects/Accident_Intel/src/Car_damage_cost '
-    '&& streamlit run app.py'
-)
+_run_cmd = f'cd {_ROOT / "src" / "Car_damage_cost"} && streamlit run app.py'
 st.code(_run_cmd, language='bash')
 
 st.markdown("""

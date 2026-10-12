@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / 'src'))
 sys.path.insert(0, str(_ROOT / 'src' / 'VLM'))
 
@@ -28,17 +29,28 @@ st.warning(
 )
 
 
+_IMPORT_FAILED = object()  # sentinel: deps missing, distinct from None or a bad return
+
+
 @st.cache_resource(show_spinner='Loading Qwen2-VL model (first run downloads ~15 GB)…')
 def load_vlm_model(model_id: str):
-    """Lazily import torch/transformers and load the Qwen2-VL model."""
+    """Lazily import torch/transformers and load the Qwen2-VL model.
+
+    Returns:
+        (model, processor) tuple on success.
+        _IMPORT_FAILED sentinel when required packages are not installed.
+    Raises:
+        Any non-ImportError exception from load_model() is re-raised so the
+        caller can display it with st.error rather than silently returning None.
+    """
     try:
         import torch  # noqa: F401
         import transformers  # noqa: F401
         import qwen_vl_utils  # noqa: F401
         from VLM.analyze_video import load_model
-        return load_model(model_id)
-    except ImportError as e:
-        return None
+    except ImportError:
+        return _IMPORT_FAILED
+    return load_model(model_id)
 
 
 # ── Upload ────────────────────────────────────────────────────────────────────
@@ -75,7 +87,7 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
 
     # Load model
     result = load_vlm_model(model_id)
-    if result is None:
+    if result is _IMPORT_FAILED:
         st.error(
             'VLM dependencies are not installed. Run:\n\n'
             '```\npip install torch torchvision transformers accelerate '
