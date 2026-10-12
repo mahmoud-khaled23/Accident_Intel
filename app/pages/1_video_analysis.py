@@ -32,9 +32,9 @@ st.warning(
 _IMPORT_FAILED = object()  # sentinel: deps missing, distinct from None or a bad return
 
 
-@st.cache_resource(show_spinner='Loading Qwen2-VL model (first run downloads ~15 GB)…')
+@st.cache_resource(show_spinner='Loading Qwen2-VL model (~15 GB, unquantized)…')
 def load_vlm_model(model_id: str):
-    """Lazily import torch/transformers and load the Qwen2-VL model.
+    """Lazily import torch/transformers and load the Qwen2-VL model in native precision.
 
     Returns:
         (model, processor) tuple on success.
@@ -85,7 +85,7 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
     with open(tmp_video, 'wb') as f:
         f.write(uploaded.read())
 
-    # Load model
+    # Load model in full precision
     result = load_vlm_model(model_id)
     if result is _IMPORT_FAILED:
         st.error(

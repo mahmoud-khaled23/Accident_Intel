@@ -1,0 +1,7 @@
+# VLM requirements for Lightning AI / Cloud GPU environments (Unquantized)
+transformers>=4.45.0
+accelerate>=0.30.0
+qwen-vl-utils>=0.0.8
+decord>=0.6.0
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
