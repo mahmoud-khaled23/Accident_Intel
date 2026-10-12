@@ -25,3 +25,5 @@ Accident_Intel\src\Car_damage_cost\data\price_cache.json
 Accident_Intel\src\Car_damage_cost\test_vlm.py
 Accident_Intel\src\Car_damage_cost\test_gemini.py
 Accident_Intel\src\Car_damage_cost\requirements.txt
+
+.tvenv/
