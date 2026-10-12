@@ -14,8 +14,23 @@ sys.path.insert(0, str(_ROOT / 'src' / 'VLM'))
 from dotenv import load_dotenv
 load_dotenv(_ROOT / '.env')
 
+# Fix PyAV >= 19 compatibility with torchvision.io.read_video
+try:
+    import av
+    _orig_av_open = av.open
+
+    def _safe_av_open(*args, **kwargs):
+        kwargs.pop("metadata_errors", None)
+        kwargs.pop("metadata_encoding", None)
+        return _orig_av_open(*args, **kwargs)
+
+    av.open = _safe_av_open
+except (ImportError, AttributeError):
+    pass
+
 import tempfile
 import streamlit as st
+
 
 from app.utils.session import init_session_defaults
 

@@ -24,8 +24,25 @@ if str(_CURRENT_DIR) not in sys.path:
 
 import cv2
 import torch
+
+# Fix PyAV >= 19 compatibility with torchvision.io.read_video:
+# PyAV 19+ removed metadata_errors and metadata_encoding, but torchvision still passes them.
+try:
+    import av
+    _orig_av_open = av.open
+
+    def _safe_av_open(*args, **kwargs):
+        kwargs.pop("metadata_errors", None)
+        kwargs.pop("metadata_encoding", None)
+        return _orig_av_open(*args, **kwargs)
+
+    av.open = _safe_av_open
+except (ImportError, AttributeError):
+    pass
+
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+
 
 try:
     from prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
