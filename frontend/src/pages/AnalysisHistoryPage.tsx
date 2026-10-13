@@ -22,6 +22,8 @@ import { LoadingState } from '@/components/common/LoadingState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { getAccidents } from '@/services/accidentService';
+import { deleteAccident } from '@/services/accidentService';
+import { isMockMode } from '@/services/apiClient';
 import type { AccidentRecord } from '@/types/accident';
 import type { AnalysisStatus } from '@/types/common';
 
@@ -151,8 +153,18 @@ export function AnalysisHistoryPage() {
     setDeleteConfirmOpen(true);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteTarget) return;
+    if (!isMockMode) {
+      try {
+        await deleteAccident(deleteTarget.id);
+      } catch (err) {
+        setToastMessage(`Delete failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setDeleteTarget(null);
+        setDeleteConfirmOpen(false);
+        return;
+      }
+    }
     setAllRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
     setToastMessage(`Analysis ${deleteTarget.id} deleted.`);
     setDeleteTarget(null);
@@ -454,7 +466,7 @@ export function AnalysisHistoryPage() {
         description="This cannot be undone. The record will be removed from your local session."
         confirmLabel="Delete"
         variant="danger"
-        onConfirm={handleDelete}
+        onConfirm={() => { void handleDelete(); }}
       />
 
       {/* Toast notification */}

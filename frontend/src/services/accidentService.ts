@@ -4,11 +4,15 @@
 import type {
   AccidentRecord,
   VehicleTrack,
+  TrackingFrame,
   VLMAnalysis,
   LiabilityAssessment,
+  VehicleAnalysis,
+  Violation,
+  Evidence,
 } from '../types/accident';
 import type { TrafficLaw } from '../types/law';
-import type { PaginatedResponse } from '../types/common';
+import type { PaginatedResponse, AnalysisStatus } from '../types/common';
 import {
   MOCK_ACCIDENTS,
   tracks001,
@@ -16,7 +20,249 @@ import {
   liabilityAssessment001,
 } from '../mocks/accidentMocks';
 import { MOCK_TRAFFIC_LAWS } from '../mocks/lawMocks';
-import { isMockMode, mockDelay, get, post, postForm } from './apiClient';
+import { isMockMode, mockDelay, get, post, postForm, del } from './apiClient';
+
+// ---------------------------------------------------------------------------
+// Backend response shape (snake_case) — local interface only, not exported
+// ---------------------------------------------------------------------------
+
+interface BackendTrackingFrame {
+  timestamp?: number;
+  vehicle_id?: string;
+  bbox?: { x: number; y: number; width: number; height: number };
+  confidence?: number;
+}
+
+interface BackendVehicleTrajectory {
+  vehicle_id?: number | string;
+  class?: string;
+  frames?: BackendTrackingFrame[];
+  speed?: number;
+}
+
+interface BackendTrackingData {
+  vehicle_count?: number;
+  fps?: number;
+  trajectories?: BackendVehicleTrajectory[];
+}
+
+interface BackendLaw {
+  section_id?: string;
+  title?: string;
+  content?: string;
+  score?: number;
+  metadata?: { jurisdiction?: string };
+}
+
+interface BackendVehicleAssessment {
+  id?: number | string;
+  role?: string;
+  violations?: string[];
+}
+
+interface BackendReport {
+  overall_assessment?: string;
+  confidence?: number;
+  limitations?: string[];
+  vehicles?: BackendVehicleAssessment[];
+  violations?: Array<{
+    description?: string;
+    law_section?: string;
+    severity?: string;
+  }>;
+}
+
+interface BackendAccidentRecord {
+  id: string;
+  status: string;
+  location?: string;
+  date_time?: string;
+  description?: string;
+  notes?: string;
+  created_at?: string;
+  video_filename?: string;
+  tracking_data?: BackendTrackingData | null;
+  vlm_description?: string | null;
+  laws?: BackendLaw[] | null;
+  report?: BackendReport | null;
+  error?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Color palette for vehicle tracks
+// ---------------------------------------------------------------------------
+
+const TRACK_COLORS = [
+  '#ef4444', '#3b82f6', '#22c55e', '#f59e0b',
+  '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
+];
+
+// ---------------------------------------------------------------------------
+// Backend → frontend mappers
+// ---------------------------------------------------------------------------
+
+function mapTrackingData(raw: BackendTrackingData | null | undefined): {
+  tracks: VehicleTrack[];
+  vehicleCount: number;
+} {
+  if (!raw) return { tracks: [], vehicleCount: 0 };
+
+  const fps = raw.fps ?? 30;
+  const trajectories = raw.trajectories ?? [];
+
+  const tracks: VehicleTrack[] = trajectories.map((traj, idx) => {
+    const vehicleId = String(traj.vehicle_id ?? idx + 1);
+    const frames: TrackingFrame[] = (traj.frames ?? []).map((f) => ({
+      timestamp: f.timestamp ?? 0,
+      vehicleId,
+      bbox: f.bbox ?? { x: 0, y: 0, width: 0, height: 0 },
+      confidence: f.confidence ?? 0,
+    }));
+
+    const timestamps = frames.map((f) => f.timestamp);
+    const confidences = frames.map((f) => f.confidence);
+    const meanConfidence =
+      confidences.length > 0
+        ? confidences.reduce((a, b) => a + b, 0) / confidences.length
+        : 0;
+
+    // Convert frame numbers to seconds if values look like frame counts
+    const firstTs = timestamps.length > 0 ? Math.min(...timestamps) : 0;
+    const lastTs = timestamps.length > 0 ? Math.max(...timestamps) : 0;
+    const firstSeen = firstTs > 1000 ? firstTs / fps : firstTs;
+    const lastSeen = lastTs > 1000 ? lastTs / fps : lastTs;
+
+    return {
+      id: vehicleId,
+      label: `Vehicle ${vehicleId}`,
+      class: traj.class ?? 'vehicle',
+      color: TRACK_COLORS[idx % TRACK_COLORS.length],
+      speed: traj.speed ?? undefined,
+      firstSeen,
+      lastSeen,
+      confidence: meanConfidence,
+      events: [],
+      frames,
+    };
+  });
+
+  return {
+    tracks,
+    vehicleCount: raw.vehicle_count ?? tracks.length,
+  };
+}
+
+function mapVLMDescription(text: string | null | undefined): VLMAnalysis {
+  return {
+    summary: text ?? '',
+    timeline: [],
+    vehicleActions: {},
+    collisionDescription: '',
+    trafficSignals: '',
+    roadContext: '',
+    uncertainties: [],
+  };
+}
+
+function mapReport(raw: BackendReport | null | undefined): LiabilityAssessment | undefined {
+  if (!raw) return undefined;
+
+  const vehicleAnalyses: VehicleAnalysis[] = (raw.vehicles ?? []).map((v) => {
+    const vid = String(v.id ?? '');
+    const role = v.role ?? '';
+    const liabilityLevel =
+      role === 'primary_at_fault'
+        ? 'potential_responsibility'
+        : role === 'not_at_fault'
+        ? 'insufficient_evidence'
+        : 'shared_responsibility';
+
+    return {
+      vehicleId: vid,
+      vehicleLabel: `Vehicle ${vid}`,
+      liabilityLevel: liabilityLevel as VehicleAnalysis['liabilityLevel'],
+      summary: v.violations?.join('; ') ?? '',
+      contributingActions: v.violations ?? [],
+      mitigatingFactors: [],
+      evidence: [],
+    };
+  });
+
+  const violations: Violation[] = (raw.violations ?? []).map((v, idx) => ({
+    id: `violation-${idx}`,
+    vehicleId: '',
+    title: v.description ?? '',
+    description: v.description ?? '',
+    lawSection: v.law_section,
+    severity: (v.severity as Violation['severity']) ?? 'minor',
+    evidence: [] as Evidence[],
+  }));
+
+  const hasReport = Boolean(raw.overall_assessment);
+
+  return {
+    overallAssessment: raw.overall_assessment ?? '',
+    overallLevel: 'shared_responsibility',
+    vehicleAnalyses,
+    violations,
+    conflictingEvidence: [],
+    missingInfo: [],
+    confidenceLevel: raw.confidence ?? 0,
+    limitations: raw.limitations ?? [],
+  };
+
+  // Keep TS happy about the unused hasReport (used implicitly through caller)
+  void hasReport;
+}
+
+function mapBackendRecord(raw: BackendAccidentRecord): AccidentRecord {
+  const { tracks, vehicleCount } = mapTrackingData(raw.tracking_data);
+  const vlmAnalysis = raw.vlm_description != null
+    ? mapVLMDescription(raw.vlm_description)
+    : undefined;
+  const liabilityAssessment = mapReport(raw.report);
+  const liabilityStatus: AccidentRecord['liabilityStatus'] =
+    liabilityAssessment ? 'assessed' : 'pending';
+
+  const validStatuses: AnalysisStatus[] = [
+    'uploaded', 'tracking', 'vlm_analysis', 'law_retrieval',
+    'reasoning', 'completed', 'failed',
+  ];
+  const rawStatus = raw.status as AnalysisStatus;
+  const safeStatus: AnalysisStatus = validStatuses.includes(rawStatus) ? rawStatus : 'failed';
+
+  return {
+    id: raw.id,
+    videoFilename: raw.video_filename ?? raw.id,
+    uploadDate: raw.created_at ?? new Date().toISOString(),
+    location: raw.location || undefined,
+    incidentDate: raw.date_time || undefined,
+    description: raw.description || undefined,
+    notes: raw.notes || undefined,
+    status: safeStatus,
+    vehicleCount,
+    liabilityStatus,
+    tracks: tracks.length > 0 ? tracks : undefined,
+    vlmAnalysis,
+    liabilityAssessment,
+    isDemoData: false,
+  };
+}
+
+function mapBackendLaws(rawLaws: BackendLaw[] | null | undefined): TrafficLaw[] {
+  if (!rawLaws) return [];
+  return rawLaws.map((l, idx) => ({
+    id: l.section_id ?? `law-${idx}`,
+    title: l.title ?? '',
+    jurisdiction: l.metadata?.jurisdiction ?? 'NYS VTL',
+    section: l.section_id ?? '',
+    excerpt: l.content ?? '',
+    fullText: l.content ?? '',
+    sourceUrl: '',
+    topics: [],
+    relevanceScore: l.score,
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -39,10 +285,22 @@ export async function getAccidents(
       totalPages: Math.ceil(MOCK_ACCIDENTS.length / pageSize),
     };
   }
-  return get<PaginatedResponse<AccidentRecord>>('/api/accidents', {
-    page,
-    page_size: pageSize,
-  });
+  const raw = await get<{
+    items: BackendAccidentRecord[];
+    total: number;
+    page: number;
+    limit: number;
+    page_size?: number;
+  }>('/api/accidents', { page, page_size: pageSize });
+
+  const effectivePageSize = raw.page_size ?? raw.limit;
+  return {
+    items: raw.items.map(mapBackendRecord),
+    total: raw.total,
+    page: raw.page,
+    pageSize: effectivePageSize,
+    totalPages: Math.ceil(raw.total / effectivePageSize),
+  };
 }
 
 /** Fetch a single accident record by ID */
@@ -53,7 +311,13 @@ export async function getAccident(id: string): Promise<AccidentRecord> {
     if (!record) throw new Error(`Accident ${id} not found`);
     return record;
   }
-  return get<AccidentRecord>(`/api/accidents/${id}`);
+  const raw = await get<BackendAccidentRecord>(`/api/accidents/${id}`);
+  return mapBackendRecord(raw);
+}
+
+/** Fetch full accident record (same as getAccident, provided for hook convenience) */
+export async function getAccidentFull(id: string): Promise<AccidentRecord> {
+  return getAccident(id);
 }
 
 /** Upload a video file and associated metadata to start a new analysis */
@@ -89,7 +353,28 @@ export async function uploadVideo(
   if (metadata.incidentDate) formData.append('incident_date', metadata.incidentDate);
   if (metadata.description) formData.append('description', metadata.description);
   if (metadata.notes) formData.append('notes', metadata.notes);
-  return postForm<AccidentRecord>('/api/accidents/upload', formData);
+  const raw = await postForm<BackendAccidentRecord>('/api/accidents/upload', formData);
+  // Attach the original filename since the server stores it internally
+  raw.video_filename = raw.video_filename ?? file.name;
+  return mapBackendRecord(raw);
+}
+
+/** Trigger the analysis pipeline for an already-uploaded accident */
+export async function triggerAnalysis(id: string): Promise<{ status: string; message: string }> {
+  if (isMockMode) {
+    await mockDelay(300);
+    return { status: 'processing', message: 'Mock analysis started' };
+  }
+  return post<{ status: string; message: string }>(`/api/accidents/${id}/analyze`);
+}
+
+/** Poll current pipeline status for an accident */
+export async function pollStatus(id: string): Promise<{ id: string; status: string; error: string | null }> {
+  if (isMockMode) {
+    await mockDelay(200);
+    return { id, status: 'completed', error: null };
+  }
+  return get<{ id: string; status: string; error: string | null }>(`/api/accidents/${id}/status`);
 }
 
 /** Get vehicle tracking data for an accident */
@@ -99,7 +384,8 @@ export async function getTrackingData(id: string): Promise<VehicleTrack[]> {
     const record = MOCK_ACCIDENTS.find((a) => a.id === id);
     return record?.tracks ?? tracks001;
   }
-  return get<VehicleTrack[]>(`/api/accidents/${id}/tracking`);
+  const raw = await get<BackendTrackingData>(`/api/accidents/${id}/tracking`);
+  return mapTrackingData(raw).tracks;
 }
 
 /** Get VLM (Vision-Language Model) analysis for an accident */
@@ -109,7 +395,8 @@ export async function getVLMAnalysis(id: string): Promise<VLMAnalysis> {
     const record = MOCK_ACCIDENTS.find((a) => a.id === id);
     return record?.vlmAnalysis ?? vlmAnalysis001;
   }
-  return get<VLMAnalysis>(`/api/accidents/${id}/vlm`);
+  const raw = await get<{ description: string }>(`/api/accidents/${id}/vlm`);
+  return mapVLMDescription(raw.description);
 }
 
 /** Get NYC traffic laws retrieved via RAG for an accident */
@@ -119,7 +406,8 @@ export async function getRetrievedLaws(id: string): Promise<TrafficLaw[]> {
     // Return the 4 most relevant laws for the demo
     return MOCK_TRAFFIC_LAWS.slice(0, 4);
   }
-  return get<TrafficLaw[]>(`/api/accidents/${id}/laws`);
+  const raw = await get<{ laws: BackendLaw[] }>(`/api/accidents/${id}/laws`);
+  return mapBackendLaws(raw.laws);
 }
 
 /** Get the liability assessment produced by the reasoning LLM */
@@ -129,7 +417,10 @@ export async function getLiabilityAssessment(id: string): Promise<LiabilityAsses
     const record = MOCK_ACCIDENTS.find((a) => a.id === id);
     return record?.liabilityAssessment ?? liabilityAssessment001;
   }
-  return get<LiabilityAssessment>(`/api/accidents/${id}/liability`);
+  const raw = await get<{ report: BackendReport | null }>(`/api/accidents/${id}/liability`);
+  const assessment = mapReport(raw.report);
+  if (!assessment) throw new Error('Liability assessment not yet available');
+  return assessment;
 }
 
 /** Delete an accident record */
@@ -139,5 +430,5 @@ export async function deleteAccident(id: string): Promise<void> {
     // In mock mode there is no persistent store — caller manages local state
     return;
   }
-  await post<void>(`/api/accidents/${id}/delete`);
+  await del<void>(`/api/accidents/${id}`);
 }

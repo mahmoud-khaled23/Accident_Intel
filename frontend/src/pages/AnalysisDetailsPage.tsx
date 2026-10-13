@@ -128,7 +128,7 @@ export function AnalysisDetailsPage() {
         ]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <DemoBadge />
+            {record.isDemoData && <DemoBadge />}
             <Button size="sm" onClick={handleDownloadPDF}>
               <Download className="h-4 w-4" />
               Download PDF
@@ -167,10 +167,12 @@ export function AnalysisDetailsPage() {
 
         {/* ── Tab: Tracking ─────────────────────────────────────────── */}
         <TabsContent value="tracking" className="space-y-6">
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-            <DemoBadge />
-            <span>Demo Mode — Mock bounding boxes for illustration. No real tracking is running.</span>
-          </div>
+          {record.isDemoData && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+              <DemoBadge />
+              <span>Demo Mode — Mock bounding boxes for illustration. No real tracking is running.</span>
+            </div>
+          )}
 
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Video placeholder + overlay */}
@@ -231,10 +233,12 @@ export function AnalysisDetailsPage() {
 
         {/* ── Tab: VLM Analysis ─────────────────────────────────────── */}
         <TabsContent value="vlm" className="space-y-4 max-w-3xl">
-          <div className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
-            <DemoBadge />
-            <span>VLM observations are generated from demo data in this prototype.</span>
-          </div>
+          {record.isDemoData && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
+              <DemoBadge />
+              <span>VLM observations are generated from demo data in this prototype.</span>
+            </div>
+          )}
           <VLMDescription
             description={record.vlmAnalysis ?? null}
             loading={false}
@@ -248,9 +252,11 @@ export function AnalysisDetailsPage() {
 
         {/* ── Tab: Traffic Laws ─────────────────────────────────────── */}
         <TabsContent value="laws" className="space-y-4 max-w-3xl">
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-            <strong>SAMPLE DATA:</strong> Law passages are demo excerpts for UI demonstration only. Do not use as legal reference.
-          </div>
+          {record.isDemoData && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+              <strong>SAMPLE DATA:</strong> Law passages are demo excerpts for UI demonstration only. Do not use as legal reference.
+            </div>
+          )}
           <p className="text-xs text-slate-500">{laws.length} laws retrieved for this analysis</p>
           <div className="space-y-4">
             {laws.map((law) => (
@@ -330,7 +336,7 @@ function OverviewTab({ record }: OverviewTabProps) {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CardTitle>Accident Metadata</CardTitle>
-            <DemoBadge className="ml-auto" />
+            {record.isDemoData && <DemoBadge className="ml-auto" />}
           </div>
         </CardHeader>
         <CardContent>
@@ -545,10 +551,12 @@ function FullReportTab({
 
       {/* Printable report body */}
       <div ref={reportRef} className="space-y-6">
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <DemoBadge />
-          <span>This report is generated from mock/demo data for prototype purposes only.</span>
-        </div>
+        {record.isDemoData && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <DemoBadge />
+            <span>This report is generated from mock/demo data for prototype purposes only.</span>
+          </div>
+        )}
 
         <DisclaimerBanner />
 

@@ -100,6 +100,17 @@ def update_accident(db_path: str, accident_id: str, updates: dict) -> dict | Non
         conn.close()
 
 
+def delete_accident(db_path: str, accident_id: str) -> bool:
+    """Delete an accident record. Returns True if it existed, False otherwise."""
+    conn = get_conn(db_path)
+    try:
+        cursor = conn.execute("DELETE FROM accidents WHERE id = ?", (accident_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def list_accidents(
     db_path: str,
     page: int = 1,

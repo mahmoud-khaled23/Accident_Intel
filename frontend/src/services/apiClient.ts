@@ -76,6 +76,12 @@ export async function postForm<T>(url: string, formData: FormData): Promise<T> {
   return response.data;
 }
 
+/** DELETE request — returns unwrapped response data */
+export async function del<T>(url: string): Promise<T> {
+  const response = await client.delete<T>(url);
+  return response.data;
+}
+
 /** Artificial latency helper for realistic mock responses (ms) */
 export function mockDelay(ms: number = 600): Promise<void> {
   const jitter = Math.floor(Math.random() * 200);

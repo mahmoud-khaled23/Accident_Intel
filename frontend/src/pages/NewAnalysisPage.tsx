@@ -21,6 +21,7 @@ import {
   Wrench,
   Search,
   X,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +45,8 @@ import { EvidenceCard } from '@/components/analysis/EvidenceCard';
 import { exportElementToPDF } from '@/utils/pdfExport';
 import { MOCK_ACCIDENTS } from '@/mocks/accidentMocks';
 import { MOCK_TRAFFIC_LAWS } from '@/mocks/lawMocks';
+import { useNewAnalysis } from '@/hooks/useAnalysis';
+import { isMockMode } from '@/services/apiClient';
 import type { TrafficLaw } from '@/types/law';
 
 // ── Step metadata ──────────────────────────────────────────────────────────
@@ -137,6 +140,18 @@ export function NewAnalysisPage() {
     notes: '',
   });
 
+  // Real analysis hook — drives the backend pipeline in real mode
+  const {
+    step: analysisStep,
+    statusMessage,
+    trackingData: realTrackingData,
+    vlmAnalysis: realVlmAnalysis,
+    laws: realLaws,
+    liabilityReport: realLiabilityReport,
+    error: analysisError,
+    startAnalysis,
+  } = useNewAnalysis();
+
   // Step 2 — tracking state
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -210,21 +225,6 @@ export function NewAnalysisPage() {
 
   // ── Law filtering ────────────────────────────────────────────────────
 
-  const allTopics = Array.from(new Set(DEMO_LAWS.flatMap((l) => l.topics)));
-
-  const filteredLaws = DEMO_LAWS.filter((l) => {
-    const q = lawQuery.toLowerCase();
-    const matchesQuery =
-      !q ||
-      l.title.toLowerCase().includes(q) ||
-      l.excerpt.toLowerCase().includes(q) ||
-      l.section.toLowerCase().includes(q);
-    const matchesTopic =
-      activeTopics.length === 0 ||
-      activeTopics.some((t) => l.topics.includes(t));
-    return matchesQuery && matchesTopic;
-  });
-
   function toggleTopic(t: string) {
     setActiveTopics((prev) =>
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
@@ -238,19 +238,25 @@ export function NewAnalysisPage() {
       alert('PDF export is in prototype state. Connect to backend for full PDF generation.');
       return;
     }
+    const reportId = isMockMode ? DEMO.id : (videoFile?.name ?? DEMO.id);
     await exportElementToPDF(reportRef.current, {
-      filename: `accident-intel-${DEMO.id}.pdf`,
+      filename: `accident-intel-${reportId}.pdf`,
       onError: (msg) => alert(msg),
     });
   }
 
   async function handleCopySummary() {
-    const summary = `Accident-Intel Report — ${DEMO.id}\n\n` +
-      `Location: ${DEMO.location ?? 'N/A'}\n` +
-      `Date: ${DEMO.incidentDate ?? 'N/A'}\n` +
-      `Vehicles: ${DEMO.vehicleCount}\n\n` +
-      `Assessment: ${DEMO.liabilityAssessment?.overallAssessment ?? 'N/A'}\n\n` +
-      `Summary: ${DEMO.vlmAnalysis?.summary ?? 'N/A'}`;
+    const reportVlm = isMockMode ? DEMO.vlmAnalysis : (realVlmAnalysis ?? DEMO.vlmAnalysis);
+    const reportLiability = isMockMode
+      ? DEMO.liabilityAssessment
+      : (realLiabilityReport ?? DEMO.liabilityAssessment);
+    const reportId = isMockMode ? DEMO.id : (videoFile?.name ?? DEMO.id);
+    const summary = `Accident-Intel Report — ${reportId}\n\n` +
+      `Location: ${metadata.location || DEMO.location || 'N/A'}\n` +
+      `Date: ${metadata.incidentDate || DEMO.incidentDate || 'N/A'}\n` +
+      `Vehicles: ${realTrackingData?.length ?? DEMO.vehicleCount}\n\n` +
+      `Assessment: ${reportLiability?.overallAssessment ?? 'N/A'}\n\n` +
+      `Summary: ${reportVlm?.summary ?? 'N/A'}`;
     await navigator.clipboard.writeText(summary).catch(() => undefined);
   }
 
@@ -352,14 +358,43 @@ export function NewAnalysisPage() {
         </div>
 
         <Button
-          onClick={advance}
-          disabled={!videoFile}
+          onClick={() => {
+            if (!videoFile) return;
+            if (isMockMode) {
+              advance();
+            } else {
+              startAnalysis(videoFile, {
+                location: metadata.location || undefined,
+                incidentDate: metadata.incidentDate || undefined,
+                description: metadata.description || undefined,
+                notes: metadata.notes || undefined,
+              });
+              advance();
+            }
+          }}
+          disabled={!videoFile || analysisStep === 'uploading'}
           size="lg"
           className="w-full sm:w-auto"
         >
-          <Play className="h-4 w-4" />
-          Start Analysis
+          {analysisStep === 'uploading' ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Uploading…
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4" />
+              Start Analysis
+            </>
+          )}
         </Button>
+
+        {/* Real-mode error display */}
+        {!isMockMode && analysisError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <strong>Error:</strong> {analysisError}
+          </div>
+        )}
       </div>
     );
   }
@@ -367,17 +402,33 @@ export function NewAnalysisPage() {
   // ── Step 2 ───────────────────────────────────────────────────────────
 
   function Step2() {
-    const tracks = DEMO.tracks ?? [];
+    const tracks = isMockMode ? (DEMO.tracks ?? []) : (realTrackingData ?? DEMO.tracks ?? []);
+    const isProcessing = !isMockMode && (
+      analysisStep === 'analyzing' ||
+      analysisStep === 'tracking' ||
+      analysisStep === 'uploading'
+    );
+
+    if (isProcessing) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">{statusMessage || 'Running vehicle tracking…'}</p>
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-6">
-        {/* Demo banner */}
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <DemoBadge />
-          <span>
-            Demo Mode — Mock bounding boxes are displayed. No real object-detection is running.
-          </span>
-        </div>
+        {/* Demo banner — only in mock mode */}
+        {isMockMode && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <DemoBadge />
+            <span>
+              Demo Mode — Mock bounding boxes are displayed. No real object-detection is running.
+            </span>
+          </div>
+        )}
 
         {/* Split layout */}
         <div className="grid lg:grid-cols-2 gap-6">
@@ -476,20 +527,39 @@ export function NewAnalysisPage() {
   // ── Step 3 ───────────────────────────────────────────────────────────
 
   function Step3() {
+    const isProcessing = !isMockMode && (
+      analysisStep === 'vlm_analysis' ||
+      analysisStep === 'tracking' ||
+      analysisStep === 'analyzing'
+    );
+    const vlmData = isMockMode
+      ? (vlmReady ? (DEMO.vlmAnalysis ?? null) : null)
+      : (realVlmAnalysis ?? null);
+    const isLoading = isMockMode ? vlmLoading : isProcessing;
+    const isReady = isMockMode ? vlmReady : Boolean(realVlmAnalysis);
+
     return (
       <div className="space-y-4 max-w-3xl">
-        <div className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
-          <DemoBadge />
-          <span>These observations are generated from mock data in this prototype.</span>
-        </div>
+        {isMockMode && (
+          <div className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
+            <DemoBadge />
+            <span>These observations are generated from mock data in this prototype.</span>
+          </div>
+        )}
+        {!isMockMode && isProcessing && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-slate-400">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm">{statusMessage || 'Analyzing video with VLM…'}</p>
+          </div>
+        )}
 
         <VLMDescription
-          description={vlmReady ? (DEMO.vlmAnalysis ?? null) : null}
-          loading={vlmLoading}
+          description={vlmData}
+          loading={isLoading}
           onSeek={(t) => setSeekTo(t)}
         />
 
-        {vlmReady && (
+        {isReady && (
           <StepNav onBack={back} onContinue={advance} continueLabel="Continue to Law Retrieval" />
         )}
       </div>
@@ -499,11 +569,40 @@ export function NewAnalysisPage() {
   // ── Step 4 ───────────────────────────────────────────────────────────
 
   function Step4() {
+    const displayLaws: TrafficLaw[] = isMockMode ? DEMO_LAWS : (realLaws ?? DEMO_LAWS);
+    const isProcessing = !isMockMode && analysisStep === 'law_retrieval';
+
+    if (isProcessing) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">{statusMessage || 'Retrieving traffic laws…'}</p>
+        </div>
+      );
+    }
+
+    const allTopicsLocal = Array.from(new Set(displayLaws.flatMap((l) => l.topics)));
+
+    const filteredLawsLocal = displayLaws.filter((l) => {
+      const q = lawQuery.toLowerCase();
+      const matchesQuery =
+        !q ||
+        l.title.toLowerCase().includes(q) ||
+        l.excerpt.toLowerCase().includes(q) ||
+        l.section.toLowerCase().includes(q);
+      const matchesTopic =
+        activeTopics.length === 0 ||
+        activeTopics.some((t) => l.topics.includes(t));
+      return matchesQuery && matchesTopic;
+    });
+
     return (
       <div className="space-y-4 max-w-3xl">
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          <strong>SAMPLE DATA:</strong> Law passages shown are demo excerpts for UI demonstration only. Do not use as legal reference.
-        </div>
+        {isMockMode && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <strong>SAMPLE DATA:</strong> Law passages shown are demo excerpts for UI demonstration only. Do not use as legal reference.
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">
@@ -527,7 +626,7 @@ export function NewAnalysisPage() {
 
         {/* Topic filter chips */}
         <div className="flex flex-wrap gap-2">
-          {allTopics.map((topic) => (
+          {allTopicsLocal.map((topic) => (
             <button
               key={topic}
               onClick={() => toggleTopic(topic)}
@@ -543,14 +642,14 @@ export function NewAnalysisPage() {
         </div>
 
         <p className="text-xs text-slate-500">
-          {filteredLaws.length} of {DEMO_LAWS.length} laws shown
+          {filteredLawsLocal.length} of {displayLaws.length} laws shown
         </p>
 
         <div className="space-y-4">
-          {filteredLaws.map((law) => (
+          {filteredLawsLocal.map((law) => (
             <LegalCitationCard key={law.id} law={law} />
           ))}
-          {filteredLaws.length === 0 && (
+          {filteredLawsLocal.length === 0 && (
             <div className="text-center py-12 text-slate-500 text-sm">
               No laws match the current filter.
             </div>
@@ -565,21 +664,41 @@ export function NewAnalysisPage() {
   // ── Step 5 ───────────────────────────────────────────────────────────
 
   function Step5() {
+    const isProcessing = !isMockMode && (
+      analysisStep === 'reasoning' ||
+      analysisStep === 'law_retrieval' ||
+      analysisStep === 'vlm_analysis'
+    );
+    const reportData = isMockMode
+      ? (liabilityReady ? (DEMO.liabilityAssessment ?? null) : null)
+      : (realLiabilityReport ?? null);
+    const isLoading = isMockMode ? liabilityLoading : isProcessing;
+    const isReady = isMockMode ? liabilityReady : Boolean(realLiabilityReport);
+
+    if (!isMockMode && isProcessing) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">{statusMessage || 'Generating liability report…'}</p>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4 max-w-3xl">
         <LiabilityReport
-          report={liabilityReady ? (DEMO.liabilityAssessment ?? null) : null}
-          loading={liabilityLoading}
+          report={reportData}
+          loading={isLoading}
           onSeek={(t) => setSeekTo(t)}
         />
 
-        {liabilityReady && DEMO.liabilityAssessment && (
+        {isReady && reportData && (
           <div className="space-y-3">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               All Evidence
             </p>
             <div className="grid sm:grid-cols-2 gap-3">
-              {DEMO.liabilityAssessment.vehicleAnalyses.flatMap((va) =>
+              {reportData.vehicleAnalyses.flatMap((va) =>
                 va.evidence.map((ev) => (
                   <EvidenceCard key={ev.id} evidence={ev} onSeek={(t) => setSeekTo(t)} />
                 )),
@@ -588,6 +707,9 @@ export function NewAnalysisPage() {
             <StepNav onBack={back} onContinue={advance} continueLabel="Continue to Final Report" />
           </div>
         )}
+        {isReady && !reportData && (
+          <StepNav onBack={back} onContinue={advance} continueLabel="Continue to Final Report" />
+        )}
       </div>
     );
   }
@@ -595,6 +717,15 @@ export function NewAnalysisPage() {
   // ── Step 6 ───────────────────────────────────────────────────────────
 
   function Step6() {
+    // Use real data in real mode, DEMO in mock mode
+    const reportTracks = isMockMode ? DEMO.tracks : (realTrackingData ?? DEMO.tracks);
+    const reportVlm = isMockMode ? DEMO.vlmAnalysis : (realVlmAnalysis ?? DEMO.vlmAnalysis);
+    const reportLaws = isMockMode ? DEMO_LAWS : (realLaws ?? DEMO_LAWS);
+    const reportLiability = isMockMode
+      ? DEMO.liabilityAssessment
+      : (realLiabilityReport ?? DEMO.liabilityAssessment);
+    const reportId = isMockMode ? DEMO.id : (videoFile?.name ?? DEMO.id);
+
     return (
       <div className="space-y-6 max-w-4xl">
         {/* Action buttons */}
@@ -618,11 +749,13 @@ export function NewAnalysisPage() {
 
         {/* Report body */}
         <div ref={reportRef} className="space-y-6">
-          {/* Demo banner */}
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-            <DemoBadge />
-            <span>This report is generated from mock/demo data for prototype purposes only.</span>
-          </div>
+          {/* Demo banner — only in mock mode */}
+          {isMockMode && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+              <DemoBadge />
+              <span>This report is generated from mock/demo data for prototype purposes only.</span>
+            </div>
+          )}
 
           <DisclaimerBanner />
 
@@ -635,7 +768,7 @@ export function NewAnalysisPage() {
               <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div>
                   <dt className="text-slate-400">Accident ID</dt>
-                  <dd className="text-slate-100 font-mono">{DEMO.id}</dd>
+                  <dd className="text-slate-100 font-mono">{reportId}</dd>
                 </div>
                 <div>
                   <dt className="text-slate-400">Video File</dt>
@@ -651,21 +784,21 @@ export function NewAnalysisPage() {
                 </div>
                 <div>
                   <dt className="text-slate-400">Vehicles Detected</dt>
-                  <dd className="text-slate-100">{DEMO.vehicleCount}</dd>
+                  <dd className="text-slate-100">{reportTracks?.length ?? DEMO.vehicleCount}</dd>
                 </div>
                 <div>
                   <dt className="text-slate-400">Liability Status</dt>
                   <dd>
-                    <Badge variant="warning" className="text-xs">{DEMO.liabilityStatus}</Badge>
+                    <Badge variant="warning" className="text-xs">
+                      {reportLiability ? 'assessed' : 'pending'}
+                    </Badge>
                   </dd>
                 </div>
               </dl>
-              {(metadata.description || DEMO.description) && (
+              {metadata.description && (
                 <div className="mt-4">
                   <dt className="text-slate-400 text-sm">Description</dt>
-                  <dd className="text-slate-100 text-sm mt-1">
-                    {metadata.description || DEMO.description}
-                  </dd>
+                  <dd className="text-slate-100 text-sm mt-1">{metadata.description}</dd>
                 </div>
               )}
             </CardContent>
@@ -684,14 +817,14 @@ export function NewAnalysisPage() {
           )}
 
           {/* Vehicle Tracking Summary */}
-          {DEMO.tracks && (
+          {reportTracks && reportTracks.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Vehicle Tracking Summary</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {DEMO.tracks.map((t) => (
+                  {reportTracks.map((t) => (
                     <div key={t.id} className="rounded-lg border border-[#1e2d45] bg-[#0d1525] p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <span
@@ -715,23 +848,21 @@ export function NewAnalysisPage() {
           )}
 
           {/* Accident Timeline */}
-          {DEMO.vlmAnalysis && (
+          {reportVlm && reportVlm.timeline.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Accident Timeline</CardTitle>
               </CardHeader>
               <CardContent>
                 <ol className="space-y-3">
-                  {DEMO.vlmAnalysis.timeline.map((ev, i) => (
+                  {reportVlm.timeline.map((ev, i) => (
                     <li key={i} className="flex gap-3 text-sm">
                       {ev.timestamp !== undefined && (
                         <span className="font-mono text-xs text-primary shrink-0 w-12">
                           {ev.timestamp.toFixed(1)}s
                         </span>
                       )}
-                      <span
-                        className={ev.type === 'fact' ? 'text-slate-200' : 'text-amber-200'}
-                      >
+                      <span className={ev.type === 'fact' ? 'text-slate-200' : 'text-amber-200'}>
                         {ev.content}
                       </span>
                       <Badge
@@ -748,56 +879,60 @@ export function NewAnalysisPage() {
           )}
 
           {/* VLM Description Summary */}
-          {DEMO.vlmAnalysis && (
+          {reportVlm && (
             <Card>
               <CardHeader>
                 <CardTitle>VLM Description Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-slate-300 mb-3">{DEMO.vlmAnalysis.summary}</p>
-                <p className="text-sm text-slate-300">{DEMO.vlmAnalysis.collisionDescription}</p>
+                <p className="text-sm text-slate-300 mb-3">{reportVlm.summary}</p>
+                {reportVlm.collisionDescription && (
+                  <p className="text-sm text-slate-300">{reportVlm.collisionDescription}</p>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Retrieved Laws Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Retrieved Traffic Laws</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {DEMO_LAWS.map((law) => (
-                  <div key={law.id} className="rounded-lg border border-[#1e2d45] bg-[#0d1525] p-4">
-                    <div className="flex items-start gap-2">
-                      <span className="font-mono text-xs text-slate-500 shrink-0">{law.section}</span>
-                      <span className="text-sm font-medium text-slate-100">{law.title}</span>
+          {reportLaws.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Retrieved Traffic Laws</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {reportLaws.map((law) => (
+                    <div key={law.id} className="rounded-lg border border-[#1e2d45] bg-[#0d1525] p-4">
+                      <div className="flex items-start gap-2">
+                        <span className="font-mono text-xs text-slate-500 shrink-0">{law.section}</span>
+                        <span className="text-sm font-medium text-slate-100">{law.title}</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1 italic">"{law.excerpt}"</p>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 italic">"{law.excerpt}"</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Liability Assessment */}
-          {DEMO.liabilityAssessment && (
+          {reportLiability && (
             <LiabilityReport
-              report={DEMO.liabilityAssessment}
+              report={reportLiability}
               loading={false}
               onSeek={(t) => setSeekTo(t)}
             />
           )}
 
           {/* Uncertainties */}
-          {DEMO.vlmAnalysis && DEMO.vlmAnalysis.uncertainties.length > 0 && (
+          {reportVlm && reportVlm.uncertainties.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Uncertainties &amp; Limitations</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {DEMO.vlmAnalysis.uncertainties.map((u, i) => (
+                  {reportVlm.uncertainties.map((u, i) => (
                     <li key={i} className="text-sm text-amber-300 flex gap-2">
                       <span className="shrink-0">•</span>
                       {u}
@@ -829,7 +964,15 @@ export function NewAnalysisPage() {
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'New Analysis' },
         ]}
-        actions={<DemoBadge />}
+        actions={
+          isMockMode ? (
+            <DemoBadge />
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/40 bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-400">
+              Live Analysis
+            </span>
+          )
+        }
       />
 
       {/* Step indicator */}

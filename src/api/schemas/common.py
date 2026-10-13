@@ -23,3 +23,8 @@ class PaginatedResponse(BaseModel, Generic[T]):
     total: int
     page: int
     limit: int
+    page_size: int | None = None  # alias for limit — populated by endpoints
+
+    @property
+    def pageSize(self) -> int:
+        return self.page_size if self.page_size is not None else self.limit

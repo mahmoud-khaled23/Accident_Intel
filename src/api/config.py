@@ -22,4 +22,5 @@ class Settings(BaseSettings):
     damage_mock: bool = True
     rag_out_dir: Path = Path("out")
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+    cors_extra_origin_pattern: str = r"https://.*\.(?:cloudspaces\.litng\.ai|litng\.ai)$"
     model_config = SettingsConfig(env_file=".env", extra="ignore")

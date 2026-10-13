@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { isMockMode } from '@/services/apiClient';
 
 interface TopbarProps {
   pageTitle: string;
@@ -21,6 +22,18 @@ export function Topbar({ pageTitle, onMenuClick }: TopbarProps) {
     const stored = localStorage.getItem('accident-intel-theme');
     return stored !== 'light';
   });
+
+  // Backend health state (only used in real mode)
+  const [backendStatus, setBackendStatus] = useState<'live' | 'offline' | 'checking'>('checking');
+
+  useEffect(() => {
+    if (isMockMode) return; // no health check in demo mode
+    fetch('/health')
+      .then((r) => {
+        setBackendStatus(r.ok ? 'live' : 'offline');
+      })
+      .catch(() => setBackendStatus('offline'));
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -51,6 +64,21 @@ export function Topbar({ pageTitle, onMenuClick }: TopbarProps) {
 
       {/* Right actions */}
       <div className="flex items-center gap-1">
+        {/* Mode status pill */}
+        {isMockMode ? (
+          <span className="hidden sm:inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 mr-1">
+            Demo
+          </span>
+        ) : backendStatus === 'live' ? (
+          <span className="hidden sm:inline-flex items-center rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400 mr-1">
+            Live
+          </span>
+        ) : backendStatus === 'offline' ? (
+          <span className="hidden sm:inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400 mr-1">
+            Offline
+          </span>
+        ) : null}
+
         {/* Notification bell */}
         <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
           <Bell className="h-4 w-4" />
