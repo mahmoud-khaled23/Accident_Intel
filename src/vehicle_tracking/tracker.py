@@ -24,6 +24,7 @@ def process_video(
     output_json,
     model_path=DEFAULT_MODEL_PATH,
     model=None,
+    min_track_frames=6,
 ):
     """Detect and track vehicles in a video.
 
@@ -171,6 +172,13 @@ def process_video(
         cap.release()
         if out is not None:
             out.release()
+
+    if min_track_frames > 1:
+        trajectories = {
+            tid: data
+            for tid, data in trajectories.items()
+            if len(data.get("trajectory", {})) >= min_track_frames
+        }
 
     output_json.parent.mkdir(parents=True, exist_ok=True)
     with open(output_json, "w", encoding="utf-8") as f:

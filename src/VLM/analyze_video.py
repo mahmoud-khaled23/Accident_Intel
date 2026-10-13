@@ -120,6 +120,8 @@ def parse_args():
                    help="YOLO model path or weights for tracking (default: yolo11x.pt).")
     p.add_argument("--repetition-penalty", type=float, default=1.15,
                    help="Repetition penalty for VLM generation (default: 1.15 to prevent repetitive loops).")
+    p.add_argument("--min-track-frames", type=int, default=6,
+                   help="Minimum number of frames a vehicle track must be active to be included in telemetry (filters out ghost detections). Default: 6.")
 
     args = p.parse_args()
 
@@ -342,14 +344,24 @@ def run_paradigm_with_tracking(
             output_video=str(out_tracked_video),
             output_json=str(out_trajectories),
             model_path=args.yolo_model,
+            min_track_frames=args.min_track_frames,
         )
         print(f"[Tracker] Annotated video saved to: {out_tracked_video}")
         print(f"[Tracker] Trajectories saved to: {out_trajectories}")
         tracked_video_p = str(out_tracked_video)
 
-    candidates = identify_accident_candidates(trajectories) if identify_accident_candidates else None
+    candidates = (
+        identify_accident_candidates(trajectories, min_track_frames=args.min_track_frames)
+        if identify_accident_candidates
+        else None
+    )
     tracking_summary = (
-        format_tracking_summary(trajectories, fps=fps, candidates=candidates)
+        format_tracking_summary(
+            trajectories,
+            fps=fps,
+            candidates=candidates,
+            min_track_frames=args.min_track_frames,
+        )
         if format_tracking_summary
         else None
     )
