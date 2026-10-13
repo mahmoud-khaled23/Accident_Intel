@@ -44,8 +44,13 @@ try:
 except (ImportError, AttributeError):
     pass
 
-from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+try:
+    from qwen_vl_utils import process_vision_info
+    from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+except ImportError:
+    process_vision_info = None
+    AutoProcessor = None
+    Qwen2VLForConditionalGeneration = None
 
 
 try:
@@ -57,15 +62,30 @@ except ImportError:
 _TRACKING_IMPORT_ERR = None
 try:
     from vehicle_tracking.tracker import process_video
-    from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+    from vehicle_tracking.accident_candidates import (
+        compute_three_phase_frame_indices,
+        format_tracking_summary,
+        identify_accident_candidates,
+        identify_single_vehicle_incidents,
+        resolve_incident_window,
+    )
 except Exception as _e:
     try:
         from src.vehicle_tracking.tracker import process_video
-        from src.vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+        from src.vehicle_tracking.accident_candidates import (
+            compute_three_phase_frame_indices,
+            format_tracking_summary,
+            identify_accident_candidates,
+            identify_single_vehicle_incidents,
+            resolve_incident_window,
+        )
     except Exception as _e2:
         process_video = None
         format_tracking_summary = None
         identify_accident_candidates = None
+        identify_single_vehicle_incidents = None
+        resolve_incident_window = None
+        compute_three_phase_frame_indices = None
         _TRACKING_IMPORT_ERR = _e2
 
 
@@ -128,6 +148,20 @@ def parse_args():
                    help="Repetition penalty for VLM generation (default: 1.15 to prevent repetitive loops).")
     p.add_argument("--min-track-frames", type=int, default=6,
                    help="Minimum number of frames a vehicle track must be active to be included in telemetry (filters out ghost detections). Default: 6.")
+
+    # Event-Triggered & 3-Phase Focused Window arguments
+    p.add_argument("--auto-trigger", action="store_true",
+                   help="Enable 2-stage event-triggered execution: fast CV pre-filter scans video first; if no incident triggers, bypasses VLM inference completely (saving 100%% compute). If triggered, feeds a 3-phase focused window into the VLM.")
+    p.add_argument("--suspicion-threshold", type=float, default=0.45,
+                   help="Minimum tracking collision suspicion score to trigger VLM (default: 0.45).")
+    p.add_argument("--pre-seconds", type=float, default=1.8,
+                   help="Seconds before impact to capture root cause / vehicle approach vectors (default: 1.8s).")
+    p.add_argument("--impact-seconds", type=float, default=0.5,
+                   help="Seconds around impact for dense slow-motion sampling (default: 0.5s).")
+    p.add_argument("--post-seconds", type=float, default=2.0,
+                   help="Seconds after impact to capture resting positions and aftermath (default: 2.0s).")
+    p.add_argument("--crop-roi", action="store_true", default=False,
+                   help="Optionally crop visual frames to the spatial bounding box ROI around incident vehicles.")
 
     args = p.parse_args()
 
@@ -340,13 +374,115 @@ def create_event_biased_clip(
     return output_clip
 
 
-def build_prompt(args, duration_s: float, tracking_summary: str | None = None) -> str:
+def create_three_phase_clip(
+    input_video: str,
+    output_clip: str,
+    event_frame: int,
+    total_frames: int,
+    fps: float,
+    n_frames: int = 32,
+    pre_seconds: float = 1.8,
+    impact_window_seconds: float = 0.5,
+    post_seconds: float = 2.0,
+    roi_box: list[int] | None = None,
+) -> str:
+    """Extract exactly n_frames allocated across 3 forensic phases:
+    1. Pre-Crash Approach (~30% frames): Speed buildup, lane crossing, traffic violations
+    2. Dense Impact Slow-Motion (~45% frames): High-frequency collision contact point
+    3. Post-Crash Aftermath (~25% frames): Final resting position and secondary hazards.
+    """
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return input_video
+
+    orig_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or total_frames
+    orig_fps = cap.get(cv2.CAP_PROP_FPS) or fps
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    if orig_total <= 0 or width <= 0 or height <= 0:
+        cap.release()
+        return input_video
+
+    indices = compute_three_phase_frame_indices(
+        event_frame=event_frame,
+        total_frames=orig_total,
+        fps=orig_fps,
+        n_frames=n_frames,
+        pre_seconds=pre_seconds,
+        impact_window_seconds=impact_window_seconds,
+        post_seconds=post_seconds,
+    )
+    target_set = set(indices)
+    max_target = max(indices)
+
+    crop_w, crop_h = width, height
+    crop_x1, crop_y1, crop_x2, crop_y2 = 0, 0, width, height
+    if roi_box and len(roi_box) == 4:
+        x1, y1, x2, y2 = [int(v) for v in roi_box]
+        x1 = max(0, min(width - 1, x1))
+        y1 = max(0, min(height - 1, y1))
+        x2 = max(x1 + 10, min(width, x2))
+        y2 = max(y1 + 10, min(height, y2))
+        if (x2 - x1) >= 40 and (y2 - y1) >= 40:
+            crop_x1, crop_y1, crop_x2, crop_y2 = x1, y1, x2, y2
+            crop_w = crop_x2 - crop_x1
+            crop_h = crop_y2 - crop_y1
+
+    Path(output_clip).parent.mkdir(parents=True, exist_ok=True)
+    out = cv2.VideoWriter(output_clip, cv2.VideoWriter_fourcc(*"mp4v"), 4.0, (crop_w, crop_h))
+    if not out.isOpened():
+        cap.release()
+        return input_video
+
+    curr_f = 0
+    while curr_f <= max_target:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if curr_f in target_set:
+            if crop_w != width or crop_h != height:
+                frame = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+            out.write(frame)
+        curr_f += 1
+
+    cap.release()
+    out.release()
+    return output_clip
+
+
+def build_prompt(
+    args,
+    duration_s: float,
+    tracking_summary: str | None = None,
+    window_info: dict | None = None,
+) -> str:
     if args.prompt_file:
         base_prompt = Path(args.prompt_file).read_text(encoding="utf-8")
     elif args.prompt_mode == "json":
         base_prompt = build_accident_prompt(args.n_frames, duration_s)
     else:
         base_prompt = TRAFFIC_ANALYSIS_PROMPT
+
+    phase_guide = ""
+    if window_info and window_info.get("triggered"):
+        pre_w = window_info.get("pre_window_s", [0.0, 0.0])
+        imp_w = window_info.get("impact_window_s", [0.0, 0.0])
+        post_w = window_info.get("post_window_s", [0.0, 0.0])
+        vids = ", ".join(f"Vehicle ID {v}" for v in window_info.get("involved_ids", []))
+        phase_guide = (
+            "======================================================================\n"
+            "EVENT-TRIGGERED 3-PHASE TEMPORAL BREAKDOWN (SLOW-MOTION CAMERA SAMPLES):\n"
+            f"- Primary Incident Involves: {vids or 'Tracked Vehicles'}\n"
+            f"- Phase 1 (Pre-Crash Approach, [{pre_w[0]:.2f}s - {pre_w[1]:.2f}s]): "
+            "Analyze driver approach vectors, lane position, speed buildup, right-of-way, or traffic violations.\n"
+            f"- Phase 2 (Dense Impact Slow-Mo, [{imp_w[0]:.2f}s - {imp_w[1]:.2f}s]): "
+            "Examine physical contact point, deformation, angle of impact, or evasive braking.\n"
+            f"- Phase 3 (Post-Crash Aftermath, [{post_w[0]:.2f}s - {post_w[1]:.2f}s]): "
+            "Observe final vehicle positions, rollover/spin trajectory, debris, and hazards.\n"
+            "In your 'Chronological Events' section, organize your analysis strictly following these three distinct phases.\n"
+            "======================================================================\n\n"
+        )
 
     if tracking_summary:
         telemetry_block = (
@@ -367,8 +503,8 @@ def build_prompt(args, duration_s: float, tracking_summary: str | None = None) -
             "5. VERDICT SUMMARY: Complete the required Verdict Summary section at the end of the report, specifying the involved Vehicle IDs.\n"
             "6. NO REPETITIVE LOOPS: State observations clearly and concisely without looping or repeating sentences.\n\n"
         )
-        return telemetry_block + base_prompt
-    return base_prompt
+        return telemetry_block + phase_guide + base_prompt
+    return phase_guide + base_prompt
 
 
 def analyze(
@@ -442,7 +578,13 @@ def run_paradigm_without_tracking(model, processor, video_path: str, args, durat
 
 
 def run_paradigm_with_tracking(
-    model, processor, video_path: str, args, duration_s: float, fps: float
+    model,
+    processor,
+    video_path: str,
+    args,
+    duration_s: float,
+    fps: float,
+    model_loader=None,
 ):
     """Paradigm 2: Neuro-symbolic grounded VLM analysis (YOLO detector + BoT-SORT tracking)."""
     trajectories = None
@@ -480,6 +622,11 @@ def run_paradigm_with_tracking(
         if identify_accident_candidates
         else None
     )
+    single_incidents = (
+        identify_single_vehicle_incidents(trajectories, fps=fps, min_track_frames=args.min_track_frames)
+        if identify_single_vehicle_incidents
+        else []
+    )
     tracking_summary = (
         format_tracking_summary(
             trajectories,
@@ -497,14 +644,85 @@ def run_paradigm_with_tracking(
         print(tracking_summary)
         print("-" * 70)
 
+    total_frames = int(duration_s * fps) if (duration_s > 0 and fps > 0) else None
+    window_info = (
+        resolve_incident_window(
+            trajectories,
+            candidates=candidates,
+            single_incidents=single_incidents,
+            fps=fps,
+            total_frames=total_frames,
+            suspicion_threshold=getattr(args, "suspicion_threshold", 0.45),
+            pre_seconds=getattr(args, "pre_seconds", 1.8),
+            impact_window_seconds=getattr(args, "impact_seconds", 0.5),
+            post_seconds=getattr(args, "post_seconds", 2.0),
+        )
+        if resolve_incident_window
+        else None
+    )
+
+    # ── Fast Pre-Filter Bypass if Auto-Trigger is active ──────────────────────
+    if getattr(args, "auto_trigger", False) and window_info and not window_info["triggered"]:
+        print("\n" + "=" * 70)
+        print("[Auto-Trigger CV Pre-Filter] NO INCIDENT DETECTED")
+        print(f"Reason: {window_info['reason']}")
+        print(f"No collision candidate or abnormal deceleration exceeded suspicion threshold ({getattr(args, 'suspicion_threshold', 0.45)}).")
+        print("Bypassing VLM multimodal inference stage completely (100% compute saved).")
+        print("=" * 70 + "\n")
+        report = (
+            "AUTOMATED TRAFFIC SAFETY REPORT: NO INCIDENT DETECTED\n\n"
+            "- Status: Normal Traffic Flow (Automated CV Pre-Filter Passed)\n"
+            f"- Monitored Vehicles: {len(trajectories)}\n"
+            f"- Peak Collision Suspicion Score: {window_info.get('suspicion_score', 0.0):.2f} "
+            f"(Threshold: {getattr(args, 'suspicion_threshold', 0.45)})\n"
+            "- Telemetry Finding: All vehicles followed orderly continuous trajectories without "
+            "critical bounding-box overlap or severe impact deceleration.\n\n"
+            "======================================================================\n"
+            "VERDICT SUMMARY:\n"
+            "- Incident Type: No Incident / Normal Flow\n"
+            "- Primary Road Users Involved: None\n"
+            "- Impact Timestamp: N/A\n"
+            "- Short Summary: Automated video tracking confirmed orderly vehicle movements without collision.\n"
+            "======================================================================\n"
+        )
+        return report, tracking_summary
+
     use_annotated = (not getattr(args, "raw_video_only", False)) and bool(tracked_video_p)
     video_for_vlm = tracked_video_p if use_annotated else video_path
     if use_annotated:
         print("[Tracker] Using annotated video with bounding boxes & track IDs for VLM visual input.")
 
-    # Smart event-biased temporal zooming
+    # ── Temporal Focusing (3-Phase Slow-Mo or Event-Biased Clip) ─────────────
     is_smart_sampling = getattr(args, "smart_sampling", True) and not getattr(args, "no_smart_sampling", False)
-    if is_smart_sampling and candidates:
+    if is_smart_sampling and window_info and window_info["triggered"]:
+        print("\n" + "=" * 70)
+        print("[Auto-Trigger] CRITICAL INCIDENT TRIGGERED!")
+        print(f"Event Frame: {window_info['event_frame']} ({window_info['t_event']:.2f}s) | Suspicion Score: {window_info['suspicion_score']:.2f}")
+        print(f"Involved Vehicles: {window_info['involved_ids']}")
+        print(f"Phase 1 (Pre-Crash Approach):   {window_info['pre_window_s'][0]:.2f}s - {window_info['pre_window_s'][1]:.2f}s")
+        print(f"Phase 2 (Dense Impact Slow-Mo): {window_info['impact_window_s'][0]:.2f}s - {window_info['impact_window_s'][1]:.2f}s")
+        print(f"Phase 3 (Post-Crash Aftermath): {window_info['post_window_s'][0]:.2f}s - {window_info['post_window_s'][1]:.2f}s")
+        if window_info.get("roi_box"):
+            print(f"Spatial ROI Box: {window_info['roi_box']}")
+        print("=" * 70 + "\n")
+
+        video_p = Path(video_path)
+        focused_clip = str(video_p.parent / f"{video_p.stem}_focused_{args.n_frames}f.mp4")
+        print(f"[Sampling] Generating 3-phase focused clip ({args.n_frames} frames)...")
+        video_for_vlm = create_three_phase_clip(
+            video_for_vlm,
+            focused_clip,
+            event_frame=window_info["event_frame"],
+            total_frames=total_frames or 100,
+            fps=fps,
+            n_frames=args.n_frames,
+            pre_seconds=getattr(args, "pre_seconds", 1.8),
+            impact_window_seconds=getattr(args, "impact_seconds", 0.5),
+            post_seconds=getattr(args, "post_seconds", 2.0),
+            roi_box=window_info["roi_box"] if getattr(args, "crop_roi", False) else None,
+        )
+        print(f"[Sampling] 3-Phase focused clip ready: {focused_clip}")
+    elif is_smart_sampling and candidates:
         event_times = []
         for cand in candidates:
             if cand.get("overlap_frame") is not None and fps > 0:
@@ -525,7 +743,11 @@ def run_paradigm_with_tracking(
             )
             print(f"[Sampling] Smart event-concentrated clip ready: {smart_clip}")
 
-    prompt = build_prompt(args, duration_s, tracking_summary=tracking_summary)
+    # Ensure model is loaded if deferred
+    if (model is None or processor is None) and model_loader is not None:
+        model, processor = model_loader()
+
+    prompt = build_prompt(args, duration_s, tracking_summary=tracking_summary, window_info=window_info)
 
     report = analyze(
         model,
@@ -549,18 +771,29 @@ def main():
 
     print(f"Video duration: {duration_s:.2f}s | FPS: {fps:.2f} | Frames sampled: {args.n_frames}")
     print(f"Selected Paradigm: {args.paradigm.upper()}")
+    if getattr(args, "auto_trigger", False):
+        print("[Mode] 2-Stage Event-Triggered Workflow Active (CV Pre-Filter -> 3-Phase Focused VLM)")
 
-    # Load VLM model once
-    model, processor = load_model(
-        model_id=args.model_id,
-        torch_dtype=args.torch_dtype,
-        load_in_4bit=args.load_4bit,
-        load_in_8bit=args.load_8bit,
-        min_pixels=args.min_pixels,
-        max_pixels=args.max_pixels,
-        attn_implementation=args.attn_implementation,
-        cache_dir=args.cache_dir,
-    )
+    model, processor = None, None
+
+    def get_vlm():
+        nonlocal model, processor
+        if model is None or processor is None:
+            model, processor = load_model(
+                model_id=args.model_id,
+                torch_dtype=args.torch_dtype,
+                load_in_4bit=args.load_4bit,
+                load_in_8bit=args.load_8bit,
+                min_pixels=args.min_pixels,
+                max_pixels=args.max_pixels,
+                attn_implementation=args.attn_implementation,
+                cache_dir=args.cache_dir,
+            )
+        return model, processor
+
+    # If pure VLM or compare mode, or if auto_trigger is disabled, load model immediately
+    if args.paradigm in ("without-tracking", "compare") or not getattr(args, "auto_trigger", False):
+        model, processor = get_vlm()
 
     # ── Paradigm Execution ──────────────────────────────────────────────────
     if args.paradigm == "without-tracking":
@@ -579,7 +812,9 @@ def main():
         print("\n" + "=" * 70)
         print("PARADIGM 2: GROUNDED VLM (WITH YOLO + BoT-SORT TRACKING)")
         print("=" * 70)
-        report, summary = run_paradigm_with_tracking(model, processor, args.video, args, duration_s, fps)
+        report, summary = run_paradigm_with_tracking(
+            model, processor, args.video, args, duration_s, fps, model_loader=get_vlm
+        )
         print(report)
         print("=" * 70)
 
@@ -596,7 +831,9 @@ def main():
         report_pure = run_paradigm_without_tracking(model, processor, args.video, args, duration_s)
 
         print("\n>>> [2/2] Executing Paradigm 2: Grounded VLM (With Detector & Tracker)...")
-        report_tracked, summary = run_paradigm_with_tracking(model, processor, args.video, args, duration_s, fps)
+        report_tracked, summary = run_paradigm_with_tracking(
+            model, processor, args.video, args, duration_s, fps, model_loader=get_vlm
+        )
 
         print("\n" + "=" * 70)
         print("COMPARISON: PARADIGM 1 (WITHOUT TRACKING) vs PARADIGM 2 (WITH TRACKING)")

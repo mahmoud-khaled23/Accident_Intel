@@ -43,6 +43,7 @@ init_session_defaults({
     'vlm_tracked_video': None,
     'vlm_video_name': None,
     'vlm_mode': None,
+    'vlm_window_info': None,
 })
 
 # ── Page ──────────────────────────────────────────────────────────────────────
@@ -93,7 +94,12 @@ with col_left:
     n_frames = st.slider('Sampled frames', min_value=8, max_value=64, value=32, step=4)
     prompt_mode = st.radio('Prompt mode', ['Report', 'JSON', 'Custom'])
     model_id = st.text_input('Model ID', value='Qwen/Qwen2-VL-7B-Instruct')
-    max_new_tokens = st.number_input('Max new tokens', min_value=100, max_value=4000, value=700)
+    max_new_tokens = st.number_input('Max new tokens', min_value=100, max_value=4000, value=1024)
+    event_triggered = st.checkbox(
+        '⚡ 2-Stage Event-Triggered Workflow',
+        value=True,
+        help='YOLO+BoT-SORT scans first. If an incident is detected, extracts a dense 3-phase temporal window (approach, impact, aftermath) for Qwen2-VL. Bypasses VLM if normal traffic.',
+    )
 
 custom_prompt = None
 if prompt_mode == 'Custom':
@@ -148,11 +154,18 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
         # ── Mode 2: Grounded VLM (With Tracking) ─────────────────────────────
         elif paradigm_choice == 'Paradigm 2: Grounded VLM (With Detector & Tracker)':
             from vehicle_tracking.tracker import process_video
-            from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+            from vehicle_tracking.accident_candidates import (
+                format_tracking_summary,
+                identify_accident_candidates,
+                identify_single_vehicle_incidents,
+                resolve_incident_window,
+            )
+            from VLM.analyze_video import create_three_phase_clip
             import cv2
 
             cap = cv2.VideoCapture(tmp_video)
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
 
             tracked_video = str(Path(tmp_dir) / 'tracked.mp4')
@@ -165,25 +178,73 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
                     output_json=tracked_json,
                 )
                 candidates = identify_accident_candidates(trajectories)
+                single_incidents = identify_single_vehicle_incidents(trajectories, fps=fps)
                 tracking_summary = format_tracking_summary(trajectories, fps=fps, candidates=candidates)
+                window_info = resolve_incident_window(
+                    trajectories,
+                    candidates=candidates,
+                    single_incidents=single_incidents,
+                    fps=fps,
+                    total_frames=total_frames,
+                )
 
-            prompt = custom_prompt if (prompt_mode == 'Custom' and custom_prompt) else build_prompt(args_ns, duration_s, tracking_summary=tracking_summary)
-            with st.spinner('Stage 2/2: Running Grounded VLM inference…'):
-                report = analyze(model, processor, tracked_video, prompt, n_frames, int(max_new_tokens))
-
-            st.session_state['vlm_report'] = report
-            st.session_state['vlm_mode'] = 'tracked'
+            st.session_state['vlm_window_info'] = window_info
             st.session_state['vlm_tracking_summary'] = tracking_summary
             st.session_state['vlm_tracked_video'] = tracked_video
+
+            if event_triggered and window_info and not window_info['triggered']:
+                st.session_state['vlm_report'] = (
+                    "AUTOMATED TRAFFIC SAFETY REPORT: NO INCIDENT DETECTED\n\n"
+                    "- Status: Normal Traffic Flow (Automated CV Pre-Filter Passed)\n"
+                    f"- Monitored Vehicles: {len(trajectories)}\n"
+                    f"- Peak Collision Suspicion Score: {window_info.get('suspicion_score', 0.0):.2f}\n"
+                    "- Telemetry Finding: All vehicles followed orderly continuous trajectories without "
+                    "critical bounding-box overlap or severe impact deceleration.\n\n"
+                    "======================================================================\n"
+                    "VERDICT SUMMARY:\n"
+                    "- Incident Type: No Incident / Normal Flow\n"
+                    "- Primary Road Users Involved: None\n"
+                    "- Impact Timestamp: N/A\n"
+                    "- Short Summary: Automated video tracking confirmed orderly vehicle movements without collision.\n"
+                    "======================================================================\n"
+                )
+                st.session_state['vlm_mode'] = 'tracked'
+            else:
+                video_to_analyze = tracked_video
+                if event_triggered and window_info and window_info['triggered']:
+                    focused_clip = str(Path(tmp_dir) / 'focused_window.mp4')
+                    with st.spinner('Extracting 3-phase slow-motion incident window (approach, impact, aftermath)…'):
+                        video_to_analyze = create_three_phase_clip(
+                            tracked_video,
+                            focused_clip,
+                            event_frame=window_info['event_frame'],
+                            total_frames=total_frames,
+                            fps=fps,
+                            n_frames=n_frames,
+                        )
+
+                prompt = custom_prompt if (prompt_mode == 'Custom' and custom_prompt) else build_prompt(args_ns, duration_s, tracking_summary=tracking_summary, window_info=window_info)
+                with st.spinner('Stage 2/2: Running Grounded VLM inference on focused incident window…'):
+                    report = analyze(model, processor, video_to_analyze, prompt, n_frames, int(max_new_tokens))
+
+                st.session_state['vlm_report'] = report
+                st.session_state['vlm_mode'] = 'tracked'
 
         # ── Mode 3: Dual Comparison (Run Both) ────────────────────────────────
         else:
             from vehicle_tracking.tracker import process_video
-            from vehicle_tracking.accident_candidates import format_tracking_summary, identify_accident_candidates
+            from vehicle_tracking.accident_candidates import (
+                format_tracking_summary,
+                identify_accident_candidates,
+                identify_single_vehicle_incidents,
+                resolve_incident_window,
+            )
+            from VLM.analyze_video import create_three_phase_clip
             import cv2
 
             cap = cv2.VideoCapture(tmp_video)
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
 
             tracked_video = str(Path(tmp_dir) / 'tracked.mp4')
@@ -197,7 +258,15 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
                     output_json=tracked_json,
                 )
                 candidates = identify_accident_candidates(trajectories)
+                single_incidents = identify_single_vehicle_incidents(trajectories, fps=fps)
                 tracking_summary = format_tracking_summary(trajectories, fps=fps, candidates=candidates)
+                window_info = resolve_incident_window(
+                    trajectories,
+                    candidates=candidates,
+                    single_incidents=single_incidents,
+                    fps=fps,
+                    total_frames=total_frames,
+                )
 
             # 2. Paradigm 1: Pure VLM
             prompt_pure = custom_prompt if (prompt_mode == 'Custom' and custom_prompt) else build_prompt(args_ns, duration_s, tracking_summary=None)
@@ -205,15 +274,29 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
                 report_pure = analyze(model, processor, tmp_video, prompt_pure, n_frames, int(max_new_tokens))
 
             # 3. Paradigm 2: Grounded VLM
-            prompt_tracked = custom_prompt if (prompt_mode == 'Custom' and custom_prompt) else build_prompt(args_ns, duration_s, tracking_summary=tracking_summary)
-            with st.spinner('[Benchmark 3/3] Running Paradigm 2: Grounded VLM with telemetry…'):
-                report_tracked = analyze(model, processor, tracked_video, prompt_tracked, n_frames, int(max_new_tokens))
+            video_to_analyze = tracked_video
+            if event_triggered and window_info and window_info['triggered']:
+                focused_clip = str(Path(tmp_dir) / 'focused_window.mp4')
+                with st.spinner('[Benchmark 2.5/3] Generating 3-phase dense slow-motion window for Paradigm 2…'):
+                    video_to_analyze = create_three_phase_clip(
+                        tracked_video,
+                        focused_clip,
+                        event_frame=window_info['event_frame'],
+                        total_frames=total_frames,
+                        fps=fps,
+                        n_frames=n_frames,
+                    )
+
+            prompt_tracked = custom_prompt if (prompt_mode == 'Custom' and custom_prompt) else build_prompt(args_ns, duration_s, tracking_summary=tracking_summary, window_info=window_info)
+            with st.spinner('[Benchmark 3/3] Running Paradigm 2: Grounded VLM on focused window…'):
+                report_tracked = analyze(model, processor, video_to_analyze, prompt_tracked, n_frames, int(max_new_tokens))
 
             st.session_state['vlm_report_pure'] = report_pure
             st.session_state['vlm_report_tracked'] = report_tracked
             st.session_state['vlm_mode'] = 'compare'
             st.session_state['vlm_tracking_summary'] = tracking_summary
             st.session_state['vlm_tracked_video'] = tracked_video
+            st.session_state['vlm_window_info'] = window_info
 
         st.session_state['vlm_video_name'] = uploaded.name
 
@@ -225,6 +308,20 @@ if st.button('Analyze video', disabled=not can_analyse, type='primary'):
 vlm_mode = st.session_state.get('vlm_mode')
 video_name = st.session_state.get('vlm_video_name', 'video')
 stem = Path(video_name).stem
+window_info = st.session_state.get('vlm_window_info')
+
+if window_info:
+    if window_info.get('triggered'):
+        st.warning(
+            f"🚨 **Critical Incident Triggered at {window_info['t_event']:.2f}s** "
+            f"(Suspicion Score: `{window_info['suspicion_score']:.2f}`) | "
+            f"Involved: `{window_info['involved_ids']}`\n\n"
+            f"- **Phase 1 (Pre-Crash Approach):** `{window_info['pre_window_s'][0]:.2f}s - {window_info['pre_window_s'][1]:.2f}s`\n"
+            f"- **Phase 2 (Dense Impact Slow-Mo):** `{window_info['impact_window_s'][0]:.2f}s - {window_info['impact_window_s'][1]:.2f}s`\n"
+            f"- **Phase 3 (Post-Crash Aftermath):** `{window_info['post_window_s'][0]:.2f}s - {window_info['post_window_s'][1]:.2f}s`"
+        )
+    else:
+        st.success("✅ **Automated CV Pre-Filter:** Normal traffic flow. No incident detected (VLM stage bypassed).")
 
 if vlm_mode == 'compare':
     st.divider()

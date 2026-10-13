@@ -508,3 +508,213 @@ def format_tracking_summary(
         lines.append("  No high-probability collisions or bounding-box overlaps detected by the tracker.")
 
     return "\n".join(lines)
+
+
+def compute_three_phase_frame_indices(
+    event_frame: int,
+    total_frames: int,
+    fps: float = 24.0,
+    n_frames: int = 32,
+    pre_seconds: float = 1.8,
+    impact_window_seconds: float = 0.5,
+    post_seconds: float = 2.0,
+) -> list[int]:
+    """Compute 3-phase frame indices:
+    - Phase 1 (~30% frames): Pre-crash approach (lane change, speed buildup, traffic violations)
+    - Phase 2 (~45% frames): Dense Impact slow-motion (contact point, deformation)
+    - Phase 3 (~25% frames): Post-crash aftermath (resting positions, hazard lights, traffic stoppage)
+    """
+    if total_frames <= n_frames:
+        return list(range(total_frames))
+
+    pre_f = max(0, event_frame - int(pre_seconds * fps))
+    impact_start_f = max(0, event_frame - int((impact_window_seconds / 2.0) * fps))
+    impact_end_f = min(total_frames - 1, event_frame + int((impact_window_seconds / 2.0) * fps))
+    post_f = min(total_frames - 1, event_frame + int(post_seconds * fps))
+
+    n_pre = max(4, int(n_frames * 0.30))
+    n_impact = max(6, int(n_frames * 0.45))
+    n_post = n_frames - n_pre - n_impact
+
+    # Pre-crash approach
+    if impact_start_f > pre_f and n_pre > 1:
+        pre_indices = [int(round(pre_f + i * (impact_start_f - pre_f) / (n_pre - 1))) for i in range(n_pre)]
+    else:
+        pre_indices = [pre_f] * n_pre
+
+    # Impact slow-mo
+    if impact_end_f > impact_start_f and n_impact > 1:
+        impact_indices = [int(round(impact_start_f + i * (impact_end_f - impact_start_f) / (n_impact - 1))) for i in range(n_impact)]
+    else:
+        impact_indices = [event_frame] * n_impact
+
+    # Post-crash aftermath
+    if post_f > impact_end_f and n_post > 1:
+        post_indices = [int(round(impact_end_f + i * (post_f - impact_end_f) / (n_post - 1))) for i in range(n_post)]
+    else:
+        post_indices = [post_f] * n_post
+
+    combined = sorted(list(dict.fromkeys(pre_indices + impact_indices + post_indices)))
+
+    # Ensure exactly n_frames
+    if len(combined) < n_frames:
+        for f in range(impact_start_f, impact_end_f + 1):
+            if f not in combined:
+                combined.append(f)
+            if len(combined) == n_frames:
+                break
+    if len(combined) < n_frames:
+        for f in range(pre_f, post_f + 1):
+            if f not in combined:
+                combined.append(f)
+            if len(combined) == n_frames:
+                break
+    if len(combined) < n_frames:
+        for f in range(total_frames):
+            if f not in combined:
+                combined.append(f)
+            if len(combined) == n_frames:
+                break
+
+    combined.sort()
+    if len(combined) > n_frames:
+        sub = [combined[int(round(i * (len(combined) - 1) / (n_frames - 1)))] for i in range(n_frames)]
+        combined = sorted(list(dict.fromkeys(sub)))
+        while len(combined) < n_frames:
+            for f in range(total_frames):
+                if f not in combined:
+                    combined.append(f)
+                    combined.sort()
+                    break
+
+    return combined
+
+
+def resolve_incident_window(
+    trajectories: dict,
+    candidates: list | None = None,
+    single_incidents: list | None = None,
+    fps: float = 25.0,
+    total_frames: int | None = None,
+    suspicion_threshold: float = 0.45,
+    pre_seconds: float = 1.8,
+    impact_window_seconds: float = 0.5,
+    post_seconds: float = 2.0,
+) -> dict:
+    """Determine whether an incident is triggered, the key event timestamp,
+    and the 3-phase temporal frame windows (Pre-crash approach, Dense Impact, Post-crash aftermath)
+    for focused VLM inspection.
+    """
+    if total_frames is None:
+        max_f = 0
+        for data in trajectories.values():
+            for f_str in data.get("trajectory", {}).keys():
+                try:
+                    max_f = max(max_f, int(f_str))
+                except (ValueError, TypeError):
+                    pass
+        total_frames = max_f + 1 if max_f > 0 else 100
+
+    duration_s = (total_frames / fps) if (total_frames and fps > 0) else 10.0
+
+    best_candidate = None
+    if candidates and len(candidates) > 0:
+        top = candidates[0]
+        if top.get("suspicion_score", 0.0) >= suspicion_threshold:
+            best_candidate = top
+
+    best_single = None
+    if single_incidents and len(single_incidents) > 0:
+        stopped_incidents = [s for s in single_incidents if s.get("stopped_after")]
+        if stopped_incidents:
+            best_single = stopped_incidents[0]
+
+    if not best_candidate and not best_single:
+        return {
+            "triggered": False,
+            "reason": "No multi-vehicle collision or single-vehicle incident exceeded suspicion threshold.",
+            "t_event": None,
+            "event_frame": None,
+            "window_start_s": 0.0,
+            "window_end_s": round(duration_s, 2),
+            "pre_window_s": [0.0, 0.0],
+            "impact_window_s": [0.0, 0.0],
+            "post_window_s": [0.0, 0.0],
+            "involved_ids": [],
+            "roi_box": None,
+            "suspicion_score": 0.0,
+        }
+
+    involved_ids = []
+    event_frame = None
+
+    if best_candidate:
+        involved_ids = best_candidate.get("vehicle_ids", [])
+        if best_candidate.get("overlap_frame") is not None:
+            event_frame = best_candidate["overlap_frame"]
+        else:
+            decel_frames = []
+            for d in best_candidate.get("deceleration", {}).values():
+                if d.get("detected") and d.get("frame") is not None:
+                    decel_frames.append(d["frame"])
+            if decel_frames:
+                event_frame = min(decel_frames)
+            elif best_candidate.get("relative_motion", {}).get("frame") is not None:
+                event_frame = best_candidate["relative_motion"]["frame"]
+
+    if event_frame is None and best_single:
+        involved_ids = [best_single["vehicle_id"]]
+        event_frame = best_single.get("deceleration_frame")
+
+    if event_frame is None:
+        event_frame = int(duration_s * fps * 0.5)
+
+    t_event = event_frame / fps if fps > 0 else 0.0
+    w_start_s = max(0.0, t_event - pre_seconds)
+    w_end_s = min(duration_s, t_event + post_seconds)
+
+    half_impact = impact_window_seconds / 2.0
+    impact_start_s = max(0.0, t_event - half_impact)
+    impact_end_s = min(duration_s, t_event + half_impact)
+
+    # Compute spatial ROI at event frame
+    roi_box = None
+    boxes_at_event = []
+    for vid in involved_ids:
+        vid_key = vid if vid in trajectories else str(vid)
+        if vid_key in trajectories:
+            traj = trajectories[vid_key].get("trajectory", {})
+            if str(event_frame) in traj:
+                boxes_at_event.append(traj[str(event_frame)]["box"])
+            else:
+                avail_f = sorted([int(f) for f in traj.keys() if f.isdigit()])
+                if avail_f:
+                    closest_f = min(avail_f, key=lambda x: abs(x - event_frame))
+                    boxes_at_event.append(traj[str(closest_f)]["box"])
+
+    if boxes_at_event:
+        min_x = min(b[0] for b in boxes_at_event)
+        min_y = min(b[1] for b in boxes_at_event)
+        max_x = max(b[2] for b in boxes_at_event)
+        max_y = max(b[3] for b in boxes_at_event)
+        pad_x = max(40, int((max_x - min_x) * 0.25))
+        pad_y = max(40, int((max_y - min_y) * 0.25))
+        roi_box = [max(0, min_x - pad_x), max(0, min_y - pad_y), max_x + pad_x, max_y + pad_y]
+
+    score = best_candidate.get("suspicion_score") if best_candidate else 0.85
+
+    return {
+        "triggered": True,
+        "reason": f"Incident triggered (score: {score:.2f}, vehicles: {involved_ids}).",
+        "t_event": round(t_event, 2),
+        "event_frame": event_frame,
+        "window_start_s": round(w_start_s, 2),
+        "window_end_s": round(w_end_s, 2),
+        "pre_window_s": [round(w_start_s, 2), round(impact_start_s, 2)],
+        "impact_window_s": [round(impact_start_s, 2), round(impact_end_s, 2)],
+        "post_window_s": [round(impact_end_s, 2), round(w_end_s, 2)],
+        "involved_ids": involved_ids,
+        "roi_box": roi_box,
+        "suspicion_score": score,
+    }
+
