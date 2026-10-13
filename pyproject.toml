@@ -27,6 +27,9 @@ dependencies = [
     "sentence-transformers==6.1.0",
     "thread==2.0.6",
     "urllib3-secure-extra==0.1.0",
+    "fastapi>=0.115.0",
+    "python-multipart>=0.0.12",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [project.scripts]
