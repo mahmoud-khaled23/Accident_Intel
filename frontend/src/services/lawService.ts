@@ -66,10 +66,43 @@ export async function searchLaws(
     }));
   }
 
-  return get<LawSearchResult[]>('/api/laws/search', {
-    q: query,
-    ...filters,
+  // Real mode — call the backend search endpoint
+  interface BackendLawResult {
+    section_id: string;
+    title: string;
+    content: string;
+    score: number;
+    metadata: Record<string, unknown>;
+  }
+  interface BackendLawSearchResponse {
+    results: BackendLawResult[];
+    query: string;
+    total: number;
+  }
+
+  const response = await get<BackendLawSearchResponse>('/api/laws/', {
+    q: query || ' ', // send a space so backend returns mock laws when empty
+    jurisdiction: filters.jurisdiction,
+    topic: filters.topic,
+    limit: 20,
   });
+
+  return response.results.map((item) => ({
+    law: {
+      id: item.section_id,
+      section: item.section_id,
+      sectionId: item.section_id,
+      title: item.title,
+      jurisdiction: (item.metadata?.jurisdiction as string) ?? 'NYS VTL',
+      excerpt: item.content,
+      fullText: item.content,
+      sourceUrl: (item.metadata?.source_url as string) || undefined,
+      topics: [],
+      relevanceScore: item.score,
+    } as TrafficLaw,
+    matchScore: item.score,
+    matchedFields: [],
+  }));
 }
 
 /** Fetch a single traffic law by ID */
