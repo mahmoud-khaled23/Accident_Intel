@@ -481,7 +481,7 @@ def build_prompt(
             f"#### [{pre_w[0]:.2f}s - {pre_w[1]:.2f}s]: Pre-Crash Approach Phase\n"
             "Analyze driver approach vectors, lane position, speed buildup, right-of-way, crosswalk pedestrians, or traffic violations.\n\n"
             f"#### [{imp_w[0]:.2f}s - {imp_w[1]:.2f}s]: Critical Interaction / Impact Phase\n"
-            f"(Centering on the ~{t_event:.2f}s critical moment): Examine whether physical contact occurred or if vehicles executed emergency avoidance braking. Detail vehicle body contact or near-miss separation.\n\n"
+            f"(Centering on the ~{t_event:.2f}s critical moment): Detail whether physical contact occurred or if vehicles executed emergency avoidance braking to avoid an obstacle. If vehicles stopped without colliding, explicitly state that no physical contact occurred.\n\n"
             f"#### [{post_w[0]:.2f}s - {post_w[1]:.2f}s]: Post-Event Aftermath Phase\n"
             "Observe final vehicle positions, rollover/spin trajectory, whether vehicles resumed motion, debris, and hazards.\n\n"
             f"In your 'Verdict Summary' section, set 'Critical Incident Timestamp:' to ~{t_event:.2f}s.\n"
@@ -504,7 +504,7 @@ def build_prompt(
             "specified in the telemetry above. Never use placeholder or hardcoded timestamps.\n"
             "4. KINEMATIC SYNCHRONIZATION: Cross-reference your deceleration and interaction descriptions with the measured speed drops "
             "and collision alerts flagged in the telemetry above.\n"
-            "5. VERDICT SUMMARY: Complete the required Verdict Summary section at the end of the report, specifying the involved Vehicle IDs.\n"
+            "5. VERDICT CLASSIFICATION INTEGRITY: If vehicles executed sudden emergency braking to avoid an obstacle (such as an animal or pedestrian) with NO physical impact or vehicle damage, you MUST classify as 'Near-Miss / Emergency Avoidance'. Never label an avoidance stop as a 'Collision' if no physical contact occurred.\n"
             "6. NO REPETITIVE LOOPS: State observations clearly and concisely without looping or repeating sentences.\n"
             "7. STRICT ENGLISH ONLY: Generate the entire report exclusively in fluent English. Under no circumstances output Chinese characters, glyphs, or phrases.\n\n"
         )

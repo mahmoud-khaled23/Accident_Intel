@@ -234,7 +234,7 @@ Reconstruct observable events in chronological order. Group observations into di
 
 Incident Evidence:
 Systematically evaluate:
-- Contact Between Road Users: State whether physical contact was clearly observed, suspected, or not observed. Cite the vehicles involved.
+- Contact Between Road Users: State "Not observed" if vehicles stopped or swerved without touching. State "Clearly observed" ONLY if actual physical collision/contact occurred. Do NOT describe emergency braking or stopping as contact.
 - Fixed Object Impact / Road Departure: State whether contact with walls, guardrails, or obstacles occurred.
 - Abrupt Maneuvers / Decelerations: Describe any sudden braking or evasive swerves, citing the vehicles involved and matching telemetry speed drops.
 - Abnormal Final Orientation: Describe any rollover, vehicle resting on its roof/side, debris, or lane blockage.
@@ -247,7 +247,7 @@ Explicitly list details that cannot be confirmed reliably from the camera footag
 
 Verdict Summary:
 - Incident Detected: [YES / NO / SUSPECTED]
-- Primary Classification: [Multi-Vehicle Collision / Single-Vehicle Crash / Near-Miss / Routine Traffic / Loss of Control]
+- Primary Classification: [Near-Miss / Emergency Avoidance (if vehicles stopped or swerved to avoid an obstacle/pedestrian/animal without physical contact) / Multi-Vehicle Collision (ONLY if physical contact occurred) / Single-Vehicle Crash / Routine Traffic]
 - Primary Vehicles Involved: [List Vehicle IDs with visual descriptions, or "None"]
 - Critical Incident Timestamp: [Exact second matching the telemetry incident timestamp, or "N/A"]
 - Summary: 1-2 sentence forensic conclusion citing the key visible evidence.
