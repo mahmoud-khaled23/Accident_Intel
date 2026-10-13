@@ -139,7 +139,7 @@ def detect(description):
 
 
 def retrieve_for_report(description, out, extra_queries=None, extra_sections=None, top_k=8,
-                        rerank=False, max_anchor_share=0.8, return_details=False):
+                        rerank=False, max_anchor_share=0.8, return_details=False, mode="hybrid"):
     """
     Returns at most top_k full law sections:
       - anchors from the keyword rules first (at most max_anchor_share * top_k of them),
@@ -175,7 +175,7 @@ def retrieve_for_report(description, out, extra_queries=None, extra_sections=Non
 
     n_anchor = min(len(anchors), max(1, int(top_k * max_anchor_share)))
     laws = anchors[:n_anchor]
-    for p in retrieve(queries, out, top_k=top_k, expand_refs=True, rerank=rerank):
+    for p in retrieve(queries, out, top_k=top_k, expand_refs=True, rerank=rerank, mode=mode):
         if len(laws) >= top_k:
             break
         if p["id"] not in {x["id"] for x in laws}:

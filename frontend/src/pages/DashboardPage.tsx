@@ -43,6 +43,7 @@ import { Badge } from '@/components/ui/badge';
 
 import { MOCK_ACCIDENTS } from '@/mocks/accidentMocks';
 import { MOCK_DAMAGE_ASSESSMENTS } from '@/mocks/damageMocks';
+import { getDamageAssessments } from '@/services/damageService';
 import { isMockMode } from '@/services/apiClient';
 import { getAccidents } from '@/services/accidentService';
 import type { AccidentRecord } from '@/types/accident';
@@ -73,6 +74,8 @@ function timeAgo(iso: string): string {
 // Status chart colors
 // ---------------------------------------------------------------------------
 const STATUS_COLORS: Record<AnalysisStatus, string> = {
+  created: '#6b7280',
+  processing: '#06b6d4',
   uploaded: '#6b7280',
   tracking: '#06b6d4',
   vlm_analysis: '#8b5cf6',
@@ -101,6 +104,8 @@ function buildActivityEvents(accidents: AccidentRecord[]): ActivityEvent[] {
 
   for (const acc of sorted.slice(0, 8)) {
     const iconMap: Record<AnalysisStatus, React.ElementType> = {
+      created: UploadCloud,
+      processing: Cpu,
       uploaded: UploadCloud,
       tracking: Video,
       vlm_analysis: Brain,
@@ -110,6 +115,8 @@ function buildActivityEvents(accidents: AccidentRecord[]): ActivityEvent[] {
       failed: AlertTriangle,
     };
     const colorMap: Record<AnalysisStatus, string> = {
+      created: 'text-slate-400',
+      processing: 'text-cyan-400',
       uploaded: 'text-slate-400',
       tracking: 'text-cyan-400',
       vlm_analysis: 'text-violet-400',
@@ -119,6 +126,8 @@ function buildActivityEvents(accidents: AccidentRecord[]): ActivityEvent[] {
       failed: 'text-red-400',
     };
     const labelMap: Record<AnalysisStatus, string> = {
+      created: 'Awaiting video',
+      processing: 'Analysis queued',
       uploaded: 'Video uploaded',
       tracking: 'Vehicle tracking in progress',
       vlm_analysis: 'VLM analysis running',
@@ -195,6 +204,11 @@ export function DashboardPage() {
       .catch(() => setAccidents([]));
   }, []);
 
+  const [damageAssessments, setDamageAssessments] = useState(isMockMode ? MOCK_DAMAGE_ASSESSMENTS.length : 0);
+  useEffect(() => {
+    if (!isMockMode) getDamageAssessments().then((items) => setDamageAssessments(items.length)).catch(() => undefined);
+  }, []);
+
   // ── Derived stats ──────────────────────────────────────────────────────
   const totalAnalyses = isMockMode ? MOCK_ACCIDENTS.length : accidents.length;
   const reportsGenerated = accidents.filter(
@@ -204,7 +218,6 @@ export function DashboardPage() {
     (sum, a) => sum + a.vehicleCount,
     0,
   );
-  const damageAssessments = MOCK_DAMAGE_ASSESSMENTS.length;
 
   // ── Table state ────────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<SortKey>('uploadDate');

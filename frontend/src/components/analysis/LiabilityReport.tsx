@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DisclaimerBanner } from '@/components/common/DisclaimerBanner';
-import { DemoBadge } from '@/components/common/DemoBadge';
 import { LoadingState } from '@/components/common/LoadingState';
 import { EvidenceCard } from './EvidenceCard';
 import type { LiabilityAssessment } from '@/types/accident';
@@ -70,12 +69,11 @@ export function LiabilityReport({ report, loading, onSeek }: LiabilityReportProp
               <ShieldAlert className="h-4 w-4 text-primary" />
               Overall Assessment
             </CardTitle>
-            <DemoBadge className="ml-auto" />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <LevelBadge level={report.overallLevel} />
-          <p className="text-sm text-slate-300 leading-relaxed">{report.overallAssessment}</p>
+          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{report.overallAssessment}</p>
 
           <div>
             <div className="flex items-center justify-between text-xs mb-1">

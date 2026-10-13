@@ -1,6 +1,8 @@
 // Shared enumerations and utility types for Accident-Intel
 
 export type AnalysisStatus =
+  | 'created'
+  | 'processing'
   | 'uploaded'
   | 'tracking'
   | 'vlm_analysis'

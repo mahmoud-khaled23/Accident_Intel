@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { DemoBadge } from '@/components/common/DemoBadge';
 import { LoadingState } from '@/components/common/LoadingState';
 import type { VLMAnalysis } from '@/types/accident';
 
@@ -77,15 +76,15 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
         <CardHeader>
           <div className="flex items-center gap-2">
             <CardTitle>Accident Summary</CardTitle>
-            <DemoBadge className="ml-auto" />
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-300 leading-relaxed">{description.summary}</p>
+          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{description.summary}</p>
         </CardContent>
       </Card>
 
       {/* Event Timeline */}
+      {description.timeline.length > 0 && <>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -191,7 +190,10 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
         </Card>
       </div>
 
+      </>}
+
       {/* Expandable sections */}
+      {Object.keys(description.vehicleActions).length > 0 && (
       <ExpandableSection
         title="Vehicle Actions"
         icon={<Car className="h-4 w-4" />}
@@ -207,13 +209,13 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
             </div>
           ))}
         </div>
-      </ExpandableSection>
+      </ExpandableSection>)}
 
-      <ExpandableSection title="Collision Description" icon={<AlertTriangle className="h-4 w-4" />}>
-        <p className="text-sm text-slate-300 leading-relaxed">{description.collisionDescription}</p>
-      </ExpandableSection>
+      {description.collisionDescription && <ExpandableSection title="Collision Description" icon={<AlertTriangle className="h-4 w-4" />}>
+        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{description.collisionDescription}</p>
+      </ExpandableSection>}
 
-      <ExpandableSection title="Traffic Signals &amp; Road Context" icon={<TrafficCone className="h-4 w-4" />}>
+      {(description.trafficSignals || description.roadContext) && <ExpandableSection title="Traffic Signals &amp; Road Context" icon={<TrafficCone className="h-4 w-4" />}>
         <div className="space-y-3">
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
@@ -228,7 +230,7 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
             <p className="text-sm text-slate-300">{description.roadContext}</p>
           </div>
         </div>
-      </ExpandableSection>
+      </ExpandableSection>}
 
       {description.pedestrians && (
         <ExpandableSection title="Pedestrian Observations" icon={<Users className="h-4 w-4" />}>
@@ -236,7 +238,7 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
         </ExpandableSection>
       )}
 
-      <ExpandableSection title="Uncertainties &amp; Limitations" icon={<MapPin className="h-4 w-4" />}>
+      {description.uncertainties.length > 0 && <ExpandableSection title="Uncertainties &amp; Limitations" icon={<MapPin className="h-4 w-4" />}>
         <ul className="space-y-2">
           {description.uncertainties.map((u, i) => (
             <li key={i} className="flex gap-2 text-sm text-amber-300">
@@ -245,7 +247,7 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
             </li>
           ))}
         </ul>
-      </ExpandableSection>
+      </ExpandableSection>}
     </div>
   );
 }

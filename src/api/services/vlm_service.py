@@ -46,123 +46,79 @@ by the hatchback for several frames prior to impact.\
 """
 
 
-def _analyze_via_openai_api(video_path: str, settings) -> str:
-    """Call a hosted OpenAI-compatible VLM (e.g. Groq) with sampled frames."""
+def _analysis_prompt(tracking_data: dict | None) -> str:
+    import json
+    from src.VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
+    from .tracking_service import summarize_tracking
+
+    prompt = TRAFFIC_ANALYSIS_PROMPT
+    if tracking_data:
+        prompt += "\nTracking observations from this video:\n" + json.dumps(summarize_tracking(tracking_data))
+        prompt += ("\nUse these track IDs only when spatial and temporal correspondence is clear. "
+                   "Do not infer speed, contact, or fault from bounding-box overlap alone. "
+                   "Give timestamps in seconds when supported by the sampled frames.")
+    return prompt
+
+
+def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | None = None) -> str:
     import base64
-    import os
+    import io
+    import math
+    from src.VLM.contact_sheet import sample_frames, make_sheet
+    import openai
+    from src.VLM.prompts import SYSTEM_PROMPT
+    from .video_service import inspect_video
 
-    import cv2
+    model_id = settings.vlm_model
+    if not model_id:
+        raise RuntimeError("Set VLM_MODEL to a vision-capable model for VLM_API=openai.")
+    if not settings.vlm_api_key:
+        raise RuntimeError("Set VLM_API_KEY for the hosted visual model.")
+    metadata = inspect_video(video_path)
+    n_frames = min(settings.vlm_n_frames, metadata["frame_count"])
+    frames = sample_frames(video_path, n_frames)
+    if not frames:
+        raise RuntimeError("No frames could be extracted from this video.")
+    content = [{"type": "text", "text": _analysis_prompt(tracking_data) +
+               "\nImages may be contact sheets: read panels left-to-right, top-to-bottom. "
+               "Each panel is a different time, labelled in seconds; they are not simultaneous objects."}]
+    group_size = math.ceil(len(frames) / settings.vlm_max_images)
+    for offset in range(0, len(frames), group_size):
+        group = frames[offset:offset + group_size]
+        if len(group) == 1:
+            ts, picture = group[0]
+            picture.thumbnail((768, 768))
+            caption = f"Frame at {ts:.3f} seconds"
+        else:
+            picture = make_sheet(group, cols=math.ceil(math.sqrt(len(group))), thumb_w=384, thumb_h=216)
+            caption = "Video frames at " + ", ".join(f"{ts:.3f} seconds" for ts, _ in group)
+        buffer = io.BytesIO()
+        picture.save(buffer, format="JPEG", quality=85)
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        content.append({"type": "text", "text": caption})
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}})
 
-    try:
-        import openai
-    except ImportError as exc:
-        raise RuntimeError(f"openai package not installed: {exc}") from exc
-
-    # Read VLM config from env — fall back to settings fields
-    vlm_base_url = os.environ.get("VLM_BASE_URL", "").strip() or settings.vlm_base_url or None
-    vlm_model = os.environ.get("VLM_MODEL", "").strip() or settings.vlm_model or settings.vlm_model_id
-    vlm_api_key = os.environ.get("VLM_API_KEY", "").strip() or settings.vlm_api_key
-
-    client = openai.OpenAI(
-        api_key=vlm_api_key or "no-key",
-        base_url=vlm_base_url,
-    )
-
-    # Sample frames from the video
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video: {video_path}")
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    n_frames = min(settings.vlm_n_frames, total_frames)
-    step = max(1, total_frames // n_frames)
-
-    frame_b64s = []
-    for i in range(n_frames):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i * step)
-        ret, frame = cap.read()
-        if not ret:
-            break
-        # Resize to max 768px wide to keep payload small
-        h, w = frame.shape[:2]
-        if w > 768:
-            scale = 768 / w
-            frame = cv2.resize(frame, (768, int(h * scale)))
-        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        frame_b64s.append(base64.b64encode(buf.tobytes()).decode("ascii"))
-    cap.release()
-
-    if not frame_b64s:
-        raise RuntimeError("No frames could be extracted from the video.")
-
-    # Build message content: interleave images with a prompt
-    content = []
-    for b64 in frame_b64s:
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-        })
-    content.append({
-        "type": "text",
-        "text": (
-            "You are an expert traffic accident analyst. These frames are sampled from a "
-            "CCTV accident video. Analyze the footage and produce a detailed accident report "
-            "covering: scene overview, chronological events, vehicle actions before the "
-            "collision, collision description, traffic signal observations, road/intersection "
-            "context, clearly separate observed facts from uncertain interpretations, and "
-            "note any limitations due to video quality or occlusion."
-        ),
-    })
-
-    response = client.chat.completions.create(
-        model=vlm_model,
-        messages=[{"role": "user", "content": content}],
-        max_tokens=settings.vlm_max_tokens,
-    )
+    with openai.OpenAI(api_key=settings.vlm_api_key, base_url=settings.vlm_base_url or None,
+                       timeout=180.0, max_retries=1) as client:
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}],
+            max_tokens=settings.vlm_max_tokens,
+            extra_body=settings.vlm_extra_params or None,
+        )
     return response.choices[0].message.content or ""
 
 
-def analyze_video(video_path: str, accident_id: str, settings) -> str:
-    """Analyze a video and return a textual accident description.
-
-    Priority:
-    1. If vlm_mock=True  → return mock description immediately.
-    2. If VLM_API=openai (env) → call hosted OpenAI-compatible API (e.g. Groq).
-    3. Otherwise → load local Qwen2-VL model (GPU required).
-    """
-    import os
-
+def analyze_video(video_path: str, accident_id: str, settings, tracking_data: dict | None = None) -> str:
+    """Use frames of the uploaded video, together with its actual tracking observations."""
     if settings.vlm_mock:
         return _MOCK_DESCRIPTION
+    if settings.vlm_api == "openai":
+        return _analyze_via_openai_api(video_path, settings, tracking_data)
 
-    vlm_api = (os.environ.get("VLM_API") or getattr(settings, "vlm_api", "") or "").strip().lower()
-
-    if vlm_api == "openai":
-        try:
-            return _analyze_via_openai_api(video_path, settings)
-        except Exception as exc:
-            raise RuntimeError(f"Hosted VLM analysis failed: {exc}") from exc
-
-    # Local Qwen2-VL path
     global _vlm_model, _vlm_processor
-
-    try:
-        from VLM.analyze_video import load_model, analyze
-        from VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
-    except ImportError as exc:
-        raise RuntimeError(f"Local VLM package is not importable: {exc}") from exc
-
-    try:
-        if _vlm_model is None:
-            _vlm_model, _vlm_processor = load_model(settings.vlm_model_id)
-
-        return analyze(
-            _vlm_model,
-            _vlm_processor,
-            video_path,
-            TRAFFIC_ANALYSIS_PROMPT,
-            settings.vlm_n_frames,
-            settings.vlm_max_tokens,
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Local VLM inference failed: {exc}") from exc
+    from src.VLM.analyze_video import load_model, analyze
+    if _vlm_model is None:
+        _vlm_model, _vlm_processor = load_model(settings.vlm_model_id)
+    return analyze(_vlm_model, _vlm_processor, video_path, _analysis_prompt(tracking_data),
+                   settings.vlm_n_frames, settings.vlm_max_tokens)

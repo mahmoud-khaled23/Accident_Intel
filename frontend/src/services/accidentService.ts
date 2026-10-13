@@ -45,6 +45,8 @@ interface BackendVehicleTrajectory {
 interface BackendTrackingData {
   vehicle_count?: number;
   fps?: number;
+  width?: number;
+  height?: number;
   trajectories?: BackendVehicleTrajectory[];
 }
 
@@ -65,6 +67,7 @@ interface BackendVehicleAssessment {
 interface BackendReport {
   overall_assessment?: string;
   confidence?: number;
+  overall_level?: LiabilityAssessment['overallLevel'];
   limitations?: string[];
   vehicles?: BackendVehicleAssessment[];
   violations?: Array<{
@@ -88,6 +91,9 @@ interface BackendAccidentRecord {
   laws?: BackendLaw[] | null;
   report?: BackendReport | null;
   error?: string | null;
+  failed_stage?: string | null;
+  is_demo_data?: boolean;
+  video_metadata?: AccidentRecord['videoMetadata'];
 }
 
 // ---------------------------------------------------------------------------
@@ -127,10 +133,10 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
       if (Array.isArray(f.bbox) && f.bbox.length === 4) {
         const [x1, y1, x2, y2] = f.bbox;
         bbox = {
-          x: x1,
-          y: y1,
-          width: Math.max(0, x2 - x1),
-          height: Math.max(0, y2 - y1),
+          x: x1 / (raw.width || 1),
+          y: y1 / (raw.height || 1),
+          width: Math.max(0, x2 - x1) / (raw.width || 1),
+          height: Math.max(0, y2 - y1) / (raw.height || 1),
         };
       } else if (f.bbox && typeof f.bbox === 'object') {
         bbox = f.bbox as { x: number; y: number; width: number; height: number };
@@ -140,7 +146,7 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
         timestamp: parseFloat(ts.toFixed(2)),
         vehicleId,
         bbox,
-        confidence: f.confidence ?? 1.0,
+        confidence: f.confidence ?? 0,
       };
     });
 
@@ -151,8 +157,8 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
         ? confidences.reduce((a, b) => a + b, 0) / confidences.length
         : 0;
 
-    const firstSeen = timestamps.length > 0 ? Math.min(...timestamps) : 0;
-    const lastSeen = timestamps.length > 0 ? Math.max(...timestamps) : 0;
+    const firstSeen = timestamps.reduce((a, b) => Math.min(a, b), timestamps[0] ?? 0);
+    const lastSeen = timestamps.reduce((a, b) => Math.max(a, b), 0);
 
     return {
       id: vehicleId,
@@ -195,9 +201,9 @@ function mapReport(raw: BackendReport | null | undefined): LiabilityAssessment |
     const liabilityLevel =
       role === 'primary_at_fault'
         ? 'potential_responsibility'
-        : role === 'not_at_fault'
-        ? 'insufficient_evidence'
-        : 'shared_responsibility';
+        : role === 'shared_responsibility' || role === 'secondary'
+        ? 'shared_responsibility'
+        : 'insufficient_evidence';
 
     return {
       vehicleId: vid,
@@ -220,11 +226,9 @@ function mapReport(raw: BackendReport | null | undefined): LiabilityAssessment |
     evidence: [] as Evidence[],
   }));
 
-  const hasReport = Boolean(raw.overall_assessment);
-
   return {
     overallAssessment: raw.overall_assessment ?? '',
-    overallLevel: 'shared_responsibility',
+    overallLevel: raw.overall_level && ['potential_responsibility', 'shared_responsibility', 'insufficient_evidence'].includes(raw.overall_level) ? raw.overall_level : 'insufficient_evidence',
     vehicleAnalyses,
     violations,
     conflictingEvidence: [],
@@ -233,8 +237,6 @@ function mapReport(raw: BackendReport | null | undefined): LiabilityAssessment |
     limitations: raw.limitations ?? [],
   };
 
-  // Keep TS happy about the unused hasReport (used implicitly through caller)
-  void hasReport;
 }
 
 function mapBackendRecord(raw: BackendAccidentRecord): AccidentRecord {
@@ -244,10 +246,10 @@ function mapBackendRecord(raw: BackendAccidentRecord): AccidentRecord {
     : undefined;
   const liabilityAssessment = mapReport(raw.report);
   const liabilityStatus: AccidentRecord['liabilityStatus'] =
-    liabilityAssessment ? 'assessed' : 'pending';
+    liabilityAssessment ? (liabilityAssessment.overallLevel === 'insufficient_evidence' ? 'insufficient_evidence' : 'assessed') : 'pending';
 
   const validStatuses: AnalysisStatus[] = [
-    'uploaded', 'tracking', 'vlm_analysis', 'law_retrieval',
+    'created', 'processing', 'uploaded', 'tracking', 'vlm_analysis', 'law_retrieval',
     'reasoning', 'completed', 'failed',
   ];
   const rawStatus = raw.status as AnalysisStatus;
@@ -267,7 +269,10 @@ function mapBackendRecord(raw: BackendAccidentRecord): AccidentRecord {
     tracks: tracks.length > 0 ? tracks : undefined,
     vlmAnalysis,
     liabilityAssessment,
-    isDemoData: false,
+    isDemoData: raw.is_demo_data ?? false,
+    error: raw.error || undefined,
+    failedStage: raw.failed_stage || undefined,
+    videoMetadata: raw.video_metadata,
   };
 }
 
@@ -314,7 +319,7 @@ export async function getAccidents(
     page: number;
     limit: number;
     page_size?: number;
-  }>('/api/accidents', { page, page_size: pageSize });
+  }>('/api/accidents/', { page, page_size: pageSize });
 
   const effectivePageSize = raw.page_size ?? raw.limit;
   return {

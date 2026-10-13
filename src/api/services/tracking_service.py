@@ -14,7 +14,8 @@ def run_tracking(
     video_path: str,
     accident_id: str,
     output_dir: str,
-    mock: bool = True,
+    mock: bool = False,
+    model_path: str = "yolo11x.pt",
 ) -> dict:
     """Run vehicle tracking and return a trajectory dict.
 
@@ -64,7 +65,9 @@ def run_tracking(
     output_video = str(out_dir / f"{accident_id}_tracked.mp4")
     output_json = str(out_dir / f"{accident_id}_trajectories.json")
 
-    raw = process_video(video_path, output_video, output_json)
+    from .video_service import inspect_video
+    metadata = inspect_video(video_path)
+    raw = process_video(video_path, output_video, output_json, model_path=model_path)
 
     # Normalise the raw trajectories dict returned by process_video
     trajectories = []
@@ -72,14 +75,32 @@ def run_tracking(
         frames = []
         for frame_str, fdata in info.get("trajectory", {}).items():
             box = fdata.get("box", [])
-            frames.append({"frame": int(frame_str), "bbox": box, "confidence": 1.0})
+            frames.append({"frame": int(frame_str), "timestamp": int(frame_str) / metadata["fps"],
+                           "bbox": box, "confidence": fdata.get("confidence", 0.0)})
+        frames.sort(key=lambda frame: frame["frame"])
         trajectories.append(
             {"id": int(track_id), "class": info.get("class", "vehicle"), "frames": frames}
         )
 
     return {
         "vehicle_count": len(trajectories),
-        "duration_seconds": 0.0,
-        "fps": 0.0,
+        **metadata,
         "trajectories": trajectories,
     }
+
+
+def summarize_tracking(data: dict) -> dict:
+    """Bound the model context regardless of video length; never invent speeds."""
+    vehicles = []
+    for track in data.get("trajectories", [])[:100]:
+        frames = track.get("frames", [])
+        sample = [frames[round(i * (len(frames) - 1) / 7)] for i in range(8)] if len(frames) > 8 else frames
+        vehicles.append({"id": track["id"], "class": track["class"],
+                         "first_seen": frames[0].get("timestamp") if frames else None,
+                         "last_seen": frames[-1].get("timestamp") if frames else None,
+                         "sampled_positions": sample})
+    return {"vehicle_count": data.get("vehicle_count", 0),
+            "duration_seconds": data.get("duration_seconds"),
+            "width": data.get("width"), "height": data.get("height"),
+            "vehicles": vehicles,
+            "limitations": "Boxes are image pixels, not calibrated speeds. Track IDs may switch or fragment."}

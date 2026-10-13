@@ -3,7 +3,6 @@ import { ExternalLink, Copy, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DemoBadge } from '@/components/common/DemoBadge';
 import type { TrafficLaw } from '@/types/law';
 
 interface LegalCitationCardProps {
@@ -13,14 +12,6 @@ interface LegalCitationCardProps {
 export function LegalCitationCard({ law }: LegalCitationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const relevancePct = law.relevanceScore !== undefined ? Math.round(law.relevanceScore * 100) : null;
-
-  function relevanceColor(score: number): string {
-    if (score >= 85) return 'bg-green-500';
-    if (score >= 65) return 'bg-amber-400';
-    return 'bg-slate-500';
-  }
 
   async function copyCitation() {
     const citation = `${law.title}, ${law.section} (${law.jurisdiction})`;
@@ -41,23 +32,11 @@ export function LegalCitationCard({ law }: LegalCitationCardProps) {
             <Badge variant="secondary" className="text-xs">
               {law.jurisdiction}
             </Badge>
-            <DemoBadge />
           </div>
         </div>
 
-        {relevancePct !== null && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-slate-400">Relevance</span>
-              <span className="text-slate-200">{relevancePct}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-[#0d1525] overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${relevanceColor(relevancePct)}`}
-                style={{ width: `${relevancePct}%` }}
-              />
-            </div>
-          </div>
+        {law.relevanceScore !== undefined && (
+          <p className="mt-2 text-xs text-slate-400">Retrieval score: {law.relevanceScore.toFixed(3)}</p>
         )}
       </CardHeader>
 

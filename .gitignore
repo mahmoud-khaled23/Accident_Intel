@@ -30,3 +30,5 @@ Accident_Intel\src\Car_damage_cost\test_gemini.py
 Accident_Intel\src\Car_damage_cost\requirements.txt
 
 .tvenv/
+# Downloaded accident-tracking checkpoints
+yolo*.pt

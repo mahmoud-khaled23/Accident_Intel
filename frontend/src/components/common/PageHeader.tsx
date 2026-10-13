@@ -26,7 +26,7 @@ export function PageHeader({
   return (
     <div className={cn('mb-6', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="mb-2 flex items-center gap-1 text-xs text-slate-500" aria-label="Breadcrumb">
+        <nav className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500" aria-label="Breadcrumb">
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={idx}>
               {idx > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
@@ -38,21 +38,21 @@ export function PageHeader({
                   {crumb.label}
                 </Link>
               ) : (
-                <span className="text-slate-400">{crumb.label}</span>
+                <span className="text-slate-400 break-all">{crumb.label}</span>
               )}
             </React.Fragment>
           ))}
         </nav>
       )}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-100 leading-tight">{title}</h1>
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold text-slate-100 leading-tight break-words">{title}</h1>
           {description && (
-            <p className="mt-1 text-sm text-slate-400">{description}</p>
+            <p className="mt-1 text-sm text-slate-400 break-words">{description}</p>
           )}
         </div>
         {actions && (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+          <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>
         )}
       </div>
     </div>

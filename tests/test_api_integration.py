@@ -6,7 +6,7 @@ import io
 # 1. Health
 # ---------------------------------------------------------------------------
 
-def test_health(test_client):
+def test_health(test_client, video_bytes):
     response = test_client.get("/health")
     assert response.status_code == 200
     data = response.json()
@@ -17,8 +17,8 @@ def test_health(test_client):
 # 2. Upload video
 # ---------------------------------------------------------------------------
 
-def test_upload_video(test_client):
-    dummy_content = b"\x00"  # 1-byte dummy file
+def test_upload_video(test_client, video_bytes):
+    dummy_content = video_bytes
     files = {"file": ("test.mp4", io.BytesIO(dummy_content), "video/mp4")}
     response = test_client.post("/api/accidents/upload", files=files)
     assert response.status_code == 201
@@ -31,9 +31,9 @@ def test_upload_video(test_client):
 # 3. Get status
 # ---------------------------------------------------------------------------
 
-def test_get_status(test_client):
+def test_get_status(test_client, video_bytes):
     # Create an accident first
-    files = {"file": ("test.mp4", io.BytesIO(b"\x00"), "video/mp4")}
+    files = {"file": ("test.mp4", io.BytesIO(video_bytes), "video/mp4")}
     create_resp = test_client.post("/api/accidents/upload", files=files)
     assert create_resp.status_code == 201
     accident_id = create_resp.json()["id"]
@@ -50,15 +50,14 @@ def test_get_status(test_client):
 # 4. Trigger analyze
 # ---------------------------------------------------------------------------
 
-def test_trigger_analyze(test_client):
-    files = {"file": ("test.mp4", io.BytesIO(b"\x00"), "video/mp4")}
+def test_trigger_analyze(test_client, video_bytes):
+    files = {"file": ("test.mp4", io.BytesIO(video_bytes), "video/mp4")}
     create_resp = test_client.post("/api/accidents/upload", files=files)
     assert create_resp.status_code == 201
     accident_id = create_resp.json()["id"]
 
     response = test_client.post(f"/api/accidents/{accident_id}/analyze")
-    # Either 200 (started) or 400 (no valid video — 1-byte file). Both are acceptable.
-    assert response.status_code in (200, 400)
+    assert response.status_code == 200
     if response.status_code == 200:
         assert "status" in response.json()
 
@@ -67,7 +66,7 @@ def test_trigger_analyze(test_client):
 # 5. List accidents
 # ---------------------------------------------------------------------------
 
-def test_list_accidents(test_client):
+def test_list_accidents(test_client, video_bytes):
     response = test_client.get("/api/accidents/")
     assert response.status_code == 200
     data = response.json()
@@ -81,8 +80,8 @@ def test_list_accidents(test_client):
 # 6. Delete accident
 # ---------------------------------------------------------------------------
 
-def test_delete_accident(test_client):
-    files = {"file": ("test.mp4", io.BytesIO(b"\x00"), "video/mp4")}
+def test_delete_accident(test_client, video_bytes):
+    files = {"file": ("test.mp4", io.BytesIO(video_bytes), "video/mp4")}
     create_resp = test_client.post("/api/accidents/upload", files=files)
     assert create_resp.status_code == 201
     accident_id = create_resp.json()["id"]
@@ -99,8 +98,8 @@ def test_delete_accident(test_client):
 # 7. VLM alias
 # ---------------------------------------------------------------------------
 
-def test_vlm_alias(test_client):
-    files = {"file": ("test.mp4", io.BytesIO(b"\x00"), "video/mp4")}
+def test_vlm_alias(test_client, video_bytes):
+    files = {"file": ("test.mp4", io.BytesIO(video_bytes), "video/mp4")}
     create_resp = test_client.post("/api/accidents/upload", files=files)
     accident_id = create_resp.json()["id"]
 
@@ -113,8 +112,8 @@ def test_vlm_alias(test_client):
 # 8. Liability alias
 # ---------------------------------------------------------------------------
 
-def test_liability_alias(test_client):
-    files = {"file": ("test.mp4", io.BytesIO(b"\x00"), "video/mp4")}
+def test_liability_alias(test_client, video_bytes):
+    files = {"file": ("test.mp4", io.BytesIO(video_bytes), "video/mp4")}
     create_resp = test_client.post("/api/accidents/upload", files=files)
     accident_id = create_resp.json()["id"]
 

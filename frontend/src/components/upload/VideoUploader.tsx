@@ -25,9 +25,10 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
   const [error, setError] = useState<string | null>(null);
 
   function validate(f: File): string | null {
-    if (!ACCEPTED_TYPES.includes(f.type)) {
+    if (!ACCEPTED_TYPES.includes(f.type) && !/\.(mp4|mov|webm)$/i.test(f.name)) {
       return `Unsupported format "${f.type || f.name}". Please upload MP4, MOV, or WebM.`;
     }
+    if (f.size === 0) return 'The selected video is empty.';
     if (f.size > MAX_BYTES) {
       return `File is too large (${formatBytes(f.size)}). Maximum allowed size is 500 MB.`;
     }

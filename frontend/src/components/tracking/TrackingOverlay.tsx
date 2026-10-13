@@ -79,7 +79,7 @@ export function TrackingOverlay({ tracks, selectedId, currentTime, enabled, widt
       ref={canvasRef}
       width={width}
       height={height}
-      className="absolute inset-0 pointer-events-none"
+      className="absolute inset-0 w-full h-full pointer-events-none"
       aria-hidden="true"
     />
   );

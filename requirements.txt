@@ -20,6 +20,7 @@ python-dotenv>=1.0.0
 # Vehicle tracking (src/vehicle_tracking/)
 # -----------------------------------------------------------------------------
 ultralytics>=8.2.0               # YOLO11 + BoT-SORT tracker
+lap>=0.5.12                     # BoT-SORT linear assignment
 supervision>=0.22.0              # annotation helpers
 opencv-python>=4.9.0             # video I/O
 

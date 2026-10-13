@@ -11,6 +11,8 @@ const STATUS_CONFIG: Record<
   AnalysisStatus,
   { label: string; variant: 'default' | 'secondary' | 'success' | 'warning' | 'danger' | 'outline'; Icon: React.ElementType }
 > = {
+  created:       { label: 'Awaiting video', variant: 'secondary', Icon: Clock },
+  processing:    { label: 'Queued', variant: 'default', Icon: Loader2 },
   uploaded:      { label: 'Uploaded',        variant: 'secondary', Icon: Clock },
   tracking:      { label: 'Tracking',        variant: 'default',   Icon: Video },
   vlm_analysis:  { label: 'VLM Analysis',    variant: 'default',   Icon: Brain },

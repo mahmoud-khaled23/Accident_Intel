@@ -131,6 +131,7 @@ def process_video(
                     trajectories[track_id]["trajectory"][str(frame_idx)] = {
                         "center": [cx, cy],
                         "box": [x1, y1, x2, y2],
+                        "confidence": float(box.conf[0]),
                     }
 
             labels = []
@@ -139,6 +140,8 @@ def process_video(
                     detections.class_id, detections.tracker_id
                 ):
                     labels.append(f"{model.names[class_id]} ID:{tracker_id}")
+            else:
+                labels = [model.names[class_id] for class_id in detections.class_id]
 
             annotated_frame = frame.copy()
             # Traces need tracker IDs; with none present there is nothing to draw.

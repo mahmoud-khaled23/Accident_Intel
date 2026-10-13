@@ -110,4 +110,8 @@ export interface AccidentRecord {
   vlmAnalysis?: VLMAnalysis;
   liabilityAssessment?: LiabilityAssessment;
   isDemoData?: boolean;
+  error?: string;
+  failedStage?: string;
+  videoMetadata?: { width: number; height: number; fps: number; duration_seconds: number };
+
 }

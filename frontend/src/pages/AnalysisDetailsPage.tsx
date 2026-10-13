@@ -24,9 +24,9 @@ import { LegalCitationCard } from '@/components/analysis/LegalCitationCard';
 import { LiabilityReport } from '@/components/analysis/LiabilityReport';
 import { EvidenceCard } from '@/components/analysis/EvidenceCard';
 import { VehicleList } from '@/components/tracking/VehicleList';
-import { TrackingOverlay } from '@/components/tracking/TrackingOverlay';
-import { Timeline } from '@/components/tracking/Timeline';
-import { getAccident, getRetrievedLaws } from '@/services/accidentService';
+import { TrackingPlayer } from '@/components/tracking/TrackingPlayer';
+import { getAccident, getRetrievedLaws, pollStatus, triggerAnalysis } from '@/services/accidentService';
+import { apiUrl } from '@/services/apiClient';
 import { exportElementToPDF } from '@/utils/pdfExport';
 import type { AccidentRecord } from '@/types/accident';
 import type { TrafficLaw } from '@/types/law';
@@ -50,14 +50,16 @@ export function AnalysisDetailsPage() {
   // Tracking tab state
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [overlayEnabled, setOverlayEnabled] = useState(true);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [starting, setStarting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [seekTo, setSeekTo] = useState<number | undefined>(undefined);
 
   // ── Load ────────────────────────────────────────────────────────────
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (quiet = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const [rec, retrievedLaws] = await Promise.all([
@@ -78,11 +80,48 @@ export function AnalysisDetailsPage() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!id || !record || ['created', 'uploaded', 'completed', 'failed'].includes(record.status)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const next = await pollStatus(id!);
+        if (cancelled) return;
+        setConnectionError(null);
+        if (next.status !== record!.status) await loadData(true);
+      } catch (err) {
+        if (!cancelled) setConnectionError(err instanceof Error ? err.message : 'Connection lost. Reconnecting…');
+      }
+      if (!cancelled) timer = setTimeout(() => void poll(), 3000);
+    }
+    timer = setTimeout(() => void poll(), 1000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [id, record?.status, loadData]);
+
+  async function retryAnalysis() {
+    if (!id || starting) return;
+    setStarting(true);
+    setActionError(null);
+    try {
+      await triggerAnalysis(id);
+      await loadData(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not start analysis.');
+    } finally { setStarting(false); }
+  }
+
+  function seekVideo(timestamp: number) {
+    setSeekTo(timestamp);
+    setActiveTab('tracking');
+  }
+
   // ── Actions ──────────────────────────────────────────────────────────
 
   async function handleDownloadPDF() {
     if (!reportRef.current) {
-      alert('PDF export is in prototype state. Connect to the backend for full PDF generation.');
+      setActiveTab('report');
+      setTimeout(() => void handleDownloadPDF(), 100);
       return;
     }
     await exportElementToPDF(reportRef.current, {
@@ -122,7 +161,7 @@ export function AnalysisDetailsPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title={`Analysis Report — ${record.id}`}
+        title={`Analysis Report — ${record.id.slice(0, 8)}`}
         description={record.description ?? record.videoFilename}
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
@@ -144,11 +183,27 @@ export function AnalysisDetailsPage() {
         }
       />
 
+      <div className="rounded-lg border border-[#1e2d45] p-4 space-y-3" aria-live="polite">
+        <StatusBadge status={record.status} />
+        {!['created', 'uploaded', 'completed', 'failed'].includes(record.status) && (
+          <p className="text-sm text-slate-300">{record.status === 'processing' ? 'Queued for analysis.' : 'Analysis is running.'} Results appear as each stage finishes. You can return here from History.</p>
+        )}
+        {record.error && <p role="alert" className="text-sm text-red-300">{record.error}</p>}
+        {connectionError && <p className="text-sm text-amber-300">Connection interrupted: {connectionError}. Retrying…</p>}
+        {actionError && <p role="alert" className="text-sm text-red-300">{actionError}</p>}
+        {(record.status === 'uploaded' || record.status === 'failed') && (
+          <Button disabled={starting} onClick={() => void retryAnalysis()}>{starting ? 'Starting…' : record.status === 'failed' ? 'Retry analysis' : 'Start analysis'}</Button>
+        )}
+        <ol className="flex flex-wrap gap-3 text-xs text-slate-400">
+          {['tracking', 'vlm_analysis', 'law_retrieval', 'reasoning'].map((stage) => <li key={stage} className={stage === record.status ? 'text-primary font-semibold' : ''}>{stage.replace('_', ' ')}</li>)}
+        </ol>
+      </div>
+
       {/* Tab navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="tracking" disabled={tracks.length === 0}>
+          <TabsTrigger value="tracking">
             Tracking
           </TabsTrigger>
           <TabsTrigger value="vlm" disabled={!record.vlmAnalysis}>
@@ -195,22 +250,7 @@ export function AnalysisDetailsPage() {
                   />
                 </div>
               </div>
-              <div className="relative aspect-video rounded-xl overflow-hidden bg-[#0d1525] border border-[#1e2d45] flex items-center justify-center">
-                <video
-                  src={`/api/accidents/${id}/video`}
-                  className="w-full h-full object-contain"
-                  controls
-                  onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
-                />
-                <TrackingOverlay
-                  tracks={tracks}
-                  selectedId={selectedVehicleId}
-                  currentTime={currentTime}
-                  enabled={overlayEnabled}
-                  width={640}
-                  height={360}
-                />
-              </div>
+              <TrackingPlayer src={apiUrl(`/api/accidents/${id}/video`)} tracks={tracks} selectedId={selectedVehicleId} enabled={overlayEnabled} seekTo={seekTo} />
             </div>
 
             {/* Vehicle list */}
@@ -218,6 +258,7 @@ export function AnalysisDetailsPage() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
                 Tracked Vehicles
               </p>
+              {tracks.length === 0 && <p className="text-sm text-slate-400">{record.status === 'completed' || record.vlmAnalysis ? 'No vehicles were detected in this video.' : 'Vehicle tracks will appear after tracking finishes.'}</p>}
               <VehicleList
                 tracks={tracks}
                 selectedId={selectedVehicleId}
@@ -228,12 +269,7 @@ export function AnalysisDetailsPage() {
             </div>
           </div>
 
-          <Timeline
-            tracks={tracks}
-            duration={15}
-            currentTime={currentTime}
-            onSeek={(t) => setCurrentTime(t)}
-          />
+
         </TabsContent>
 
         {/* ── Tab: VLM Analysis ─────────────────────────────────────── */}
@@ -247,12 +283,8 @@ export function AnalysisDetailsPage() {
           <VLMDescription
             description={record.vlmAnalysis ?? null}
             loading={false}
-            onSeek={(t) => setSeekTo(t)}
+            onSeek={seekVideo}
           />
-          {/* Suppress unused seekTo lint — it would be used by a real video player */}
-          {seekTo !== undefined && (
-            <span className="hidden" aria-hidden="true" />
-          )}
         </TabsContent>
 
         {/* ── Tab: Traffic Laws ─────────────────────────────────────── */}
@@ -275,7 +307,7 @@ export function AnalysisDetailsPage() {
           <LiabilityReport
             report={record.liabilityAssessment ?? null}
             loading={false}
-            onSeek={(t) => setSeekTo(t)}
+            onSeek={seekVideo}
           />
           {record.liabilityAssessment && (
             <div className="space-y-3">
@@ -285,7 +317,7 @@ export function AnalysisDetailsPage() {
               <div className="grid sm:grid-cols-2 gap-3">
                 {record.liabilityAssessment.vehicleAnalyses.flatMap((va) =>
                   va.evidence.map((ev) => (
-                    <EvidenceCard key={ev.id} evidence={ev} onSeek={(t) => setSeekTo(t)} />
+                    <EvidenceCard key={ev.id} evidence={ev} onSeek={seekVideo} />
                   )),
                 )}
               </div>
@@ -477,7 +509,7 @@ function OverviewTab({ record }: OverviewTabProps) {
             <CardTitle>VLM Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-300 leading-relaxed">
+            <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
               {record.vlmAnalysis.summary}
             </p>
           </CardContent>
@@ -491,7 +523,7 @@ function OverviewTab({ record }: OverviewTabProps) {
             <CardTitle>Liability Overview</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-300 leading-relaxed">
+            <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
               {record.liabilityAssessment.overallAssessment}
             </p>
             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
@@ -648,7 +680,7 @@ function FullReportTab({
         )}
 
         {/* Accident Timeline */}
-        {record.vlmAnalysis && (
+        {record.vlmAnalysis && record.vlmAnalysis.timeline.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Accident Timeline</CardTitle>

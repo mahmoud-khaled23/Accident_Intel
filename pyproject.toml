@@ -52,6 +52,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "aiofiles>=25.1.0",
     "pandas>=3.0.6",
+    "lap>=0.5.12",
 ]
 
 [project.scripts]

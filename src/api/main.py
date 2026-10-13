@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import Settings
-from .models import init_db
+from .models import init_db, recover_interrupted_analyses
 from .routers.accidents import router as accidents_router
 from .routers.damage import router as damage_router
 from .routers.laws import router as laws_router
@@ -62,10 +62,11 @@ async def lifespan(app: FastAPI):
 
     # Create required output directories
     for subdir in ("", "accidents", "damage"):
-        Path("out", subdir).mkdir(parents=True, exist_ok=True)
+        (settings.data_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     # Initialise the SQLite database
     init_db(str(settings.db_path))
+    recover_interrupted_analyses(str(settings.db_path))
 
     yield
 
@@ -98,8 +99,11 @@ def create_app() -> FastAPI:
     app.include_router(laws_router)
 
     @app.get("/health", tags=["health"])
+    @app.get("/api/health", tags=["health"])
     def health():
-        return {"status": "ok", "version": settings.api_version}
+        return {"status": "ok", "version": settings.api_version,
+                "pipeline": {name: "demo" if getattr(settings, f"{name}_mock") else "real"
+                             for name in ("tracking", "vlm", "rag", "reasoning")}}
 
     return app
 

@@ -48,7 +48,7 @@ def load_model(model_id: str):
         model_id, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS
     )
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_id, torch_dtype=torch.float16, device_map="auto"
+        model_id, torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32, device_map="auto"
     )
     print("Model loaded successfully!")
     print("Device mapping:", model.hf_device_map)
@@ -74,6 +74,15 @@ def build_prompt(args, duration_s: float) -> str:
 
 
 def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_new_tokens: int) -> str:
+    # Qwen video sampling requires an even count that fits in the source clip.
+    cap = cv2.VideoCapture(video_path)
+    try:
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    finally:
+        cap.release()
+    if frame_count < 2:
+        raise ValueError("The local visual model requires a video with at least two frames.")
+    n_frames = min(max(2, n_frames), frame_count) // 2 * 2
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {

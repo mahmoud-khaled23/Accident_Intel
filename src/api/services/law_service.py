@@ -71,7 +71,8 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
             description=description,
             out=out_dir,
             top_k=5,
-            rerank=True,
+            rerank=settings.rag_rerank,
+            mode=settings.rag_mode,
             return_details=False,
         )
     except Exception as exc:

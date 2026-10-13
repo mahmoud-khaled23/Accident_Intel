@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { isMockMode } from '@/services/apiClient';
+import { isMockMode, get } from '@/services/apiClient';
 
 interface TopbarProps {
   pageTitle: string;
@@ -30,10 +30,8 @@ export function Topbar({ pageTitle, onMenuClick }: TopbarProps) {
 
   useEffect(() => {
     if (isMockMode) return; // no health check in demo mode
-    fetch('/health')
-      .then((r) => {
-        setBackendStatus(r.ok ? 'live' : 'offline');
-      })
+    get<{ status: string }>('/api/health')
+      .then((r) => setBackendStatus(r.status === 'ok' ? 'live' : 'offline'))
       .catch(() => setBackendStatus('offline'));
   }, []);
 

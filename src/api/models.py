@@ -79,13 +79,16 @@ def get_accident(db_path: str, accident_id: str) -> dict | None:
         conn.close()
 
 
-def update_accident(db_path: str, accident_id: str, updates: dict) -> dict | None:
+def update_accident(db_path: str, accident_id: str, updates: dict, *, only_if_idle: bool = False) -> dict | None:
     conn = get_conn(db_path)
     try:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT status, data FROM accidents WHERE id = ?", (accident_id,)
         ).fetchone()
         if row is None:
+            return None
+        if only_if_idle and row["status"] in ACTIVE_STATUSES:
             return None
         current = json.loads(row["data"])
         current.update(updates)
@@ -100,10 +103,54 @@ def update_accident(db_path: str, accident_id: str, updates: dict) -> dict | Non
         conn.close()
 
 
+ACTIVE_STATUSES = {"processing", "tracking", "vlm_analysis", "law_retrieval", "reasoning"}
+
+
+def claim_analysis(db_path: str, accident_id: str, is_demo: bool) -> bool:
+    """Atomically reserve a job and clear stale results before scheduling it."""
+    conn = get_conn(db_path)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status, data FROM accidents WHERE id = ?", (accident_id,)).fetchone()
+        if row is None or row["status"] in ACTIVE_STATUSES:
+            return False
+        data = json.loads(row["data"])
+        data.update(status="processing", error=None, failed_stage=None,
+                    tracking_data=None, vlm_description=None, laws=None, report=None,
+                    is_demo_data=is_demo)
+        conn.execute("UPDATE accidents SET status = ?, data = ? WHERE id = ?",
+                     ("processing", json.dumps(data), accident_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def recover_interrupted_analyses(db_path: str) -> None:
+    """Background tasks cannot survive a server restart; make them retryable."""
+    conn = get_conn(db_path)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for row in conn.execute("SELECT id, status, data FROM accidents").fetchall():
+            if row["status"] in ACTIVE_STATUSES:
+                data = json.loads(row["data"])
+                data.update(status="failed", failed_stage=row["status"],
+                            error="Analysis interrupted by a server restart. Retry this analysis.")
+                conn.execute("UPDATE accidents SET status = 'failed', data = ? WHERE id = ?",
+                             (json.dumps(data), row["id"]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def delete_accident(db_path: str, accident_id: str) -> bool:
     """Delete an accident record. Returns True if it existed, False otherwise."""
     conn = get_conn(db_path)
     try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status FROM accidents WHERE id = ?", (accident_id,)).fetchone()
+        if row and row["status"] in ACTIVE_STATUSES:
+            raise ValueError("Cannot delete an analysis while it is running.")
         cursor = conn.execute("DELETE FROM accidents WHERE id = ?", (accident_id,))
         conn.commit()
         return cursor.rowcount > 0

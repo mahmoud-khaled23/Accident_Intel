@@ -11,6 +11,8 @@ pip install sentence-transformers chromadb rank-bm25
 import argparse
 import json
 import re
+from functools import lru_cache
+from threading import Lock
 from pathlib import Path
 
 import chromadb
@@ -21,6 +23,18 @@ from ..chunking.query_expansion import expand_queries
 
 MODEL_NAME = "BAAI/bge-m3"   # multilingual (English + Arabic) embedding model
 RERANKER_NAME = "BAAI/bge-reranker-v2-m3"   # optional cross-encoder used with --rerank
+_index_lock = Lock()
+
+
+@lru_cache(maxsize=1)
+def get_embedding_model():
+    return SentenceTransformer(MODEL_NAME, device="cpu")
+
+
+@lru_cache(maxsize=1)
+def get_reranker():
+    from sentence_transformers import CrossEncoder
+    return CrossEncoder(RERANKER_NAME, device="cpu")
 
 # ---------------------------------------------------------------- BM25 helpers
 _AR_DIACRITICS = re.compile(r"[\u064B-\u0652\u0670\u0640]")   # tashkeel + tatweel
@@ -83,7 +97,7 @@ def get_collection(out):
 def index(out):
     """Embed every child chunk and store it in a local Chroma database. (BM25 needs no indexing step.)"""
     _, children = load(out)
-    model = SentenceTransformer(MODEL_NAME)
+    model = get_embedding_model()
     col = get_collection(out)
     B = 64
     for i in range(0, len(children), B):
@@ -151,14 +165,18 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
     use_dense = mode in ("dense", "hybrid")
     use_bm25 = mode in ("bm25", "hybrid")
 
-    model = SentenceTransformer(MODEL_NAME) if use_dense else None
+    model = get_embedding_model() if use_dense else None
     col = get_collection(out) if use_dense else None
+    # Fresh checkouts ship law chunks; build the dense index on first use.
+    if use_dense:
+        with _index_lock:
+            if col.count() < len(children):
+                index(out)
     bm25, bm25_ids = get_bm25(out, children) if use_bm25 else (None, None)
 
     reranker = None
     if rerank:
-        from sentence_transformers import CrossEncoder
-        reranker = CrossEncoder(RERANKER_NAME)
+        reranker = get_reranker()
 
     # several chunks can belong to the same section, so fetch more chunks than top_k
     n_chunks = max(rerank_pool, top_k * 5) if rerank else max(k_children, top_k * 3)

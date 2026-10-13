@@ -1,6 +1,6 @@
 # Accident-Intel Frontend
 
-A React + TypeScript single-page application for AI-assisted traffic accident analysis. It lets investigators upload accident footage, view vehicle tracking overlays, read VLM-generated scene descriptions, retrieve relevant traffic laws, and generate liability reports — all backed by mock data in demo mode.
+A React + TypeScript single-page application for AI-assisted traffic accident analysis. It lets investigators upload accident footage, view vehicle tracking overlays, read VLM-generated scene descriptions, retrieve relevant traffic laws, and generate liability reports — connected to the backend model pipeline by default.
 
 ---
 
@@ -29,7 +29,7 @@ The development server runs at **http://localhost:5173** with hot module reloadi
 npm run build
 ```
 
-Output is written to `dist/`. Serve with any static file server (e.g. `npx serve dist`).
+Output is written to `dist/`. For deployment, route `/api` to the backend or set `VITE_API_BASE_URL` before building.
 
 ---
 
@@ -43,17 +43,17 @@ cp .env.example .env.local
 
 | Variable            | Default                    | Description                                         |
 |---------------------|----------------------------|-----------------------------------------------------|
-| `VITE_API_BASE_URL` | `http://localhost:8000`    | Base URL of the FastAPI backend                     |
-| `VITE_USE_MOCK`     | `true`                     | `true` = local mock data; `false` = real backend    |
+| `VITE_API_BASE_URL` | `empty (same origin)`     | Base URL of the FastAPI backend                     |
+| `VITE_USE_MOCK`     | `false`                    | `true` = local mock data; `false` = real backend    |
 
 ---
 
 ## Mock / Demo Mode
 
-When `VITE_USE_MOCK=true` (the default), all data comes from local mock files under `src/mocks/`. No network requests are made. Every page shows a **Demo Data** badge. To connect to the real FastAPI backend:
+When `VITE_USE_MOCK=true` (explicit demo mode), all data comes from local mock files under `src/mocks/`. No network requests are made. Every page shows a **Demo Data** badge. To connect to the real FastAPI backend:
 
 1. Set `VITE_USE_MOCK=false` in `.env.local`
-2. Set `VITE_API_BASE_URL` to your backend URL
+2. Leave `VITE_API_BASE_URL` empty for the Vite proxy, including Lightning Studio. Set a public backend URL only for a separate deployment.
 3. Restart the dev server
 
 ---
@@ -128,3 +128,10 @@ src/
 | jsPDF + html2canvas  | latest   | PDF export                                |
 | Lucide React         | latest   | Icon set                                  |
 | Axios                | latest   | HTTP client (real mode)                   |
+
+## Real video analysis
+
+Upload a video and optional incident details on `/analysis/new`. After the upload starts the
+model pipeline, the app opens `/analysis/:id`. This saved page follows live status, shows partial
+results, and supports retries. History restores the same video and results after refresh.
+The Tracking tab plays the uploaded video and draws model detections at its actual timestamps.

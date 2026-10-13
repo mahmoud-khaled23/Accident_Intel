@@ -32,6 +32,14 @@ export function Timeline({ tracks, duration, currentTime, onSeek }: TimelineProp
         ref={containerRef}
         className="relative h-16 rounded-lg cursor-pointer select-none bg-[#0a0f1e] overflow-hidden"
         onClick={handleClick}
+        style={{ height: Math.max(64, tracks.length * 20 + 16) }}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            onSeek(Math.max(0, Math.min(duration, currentTime + (e.key === 'ArrowRight' ? 1 : -1))));
+          }
+        }}
         role="slider"
         aria-label="Video timeline"
         aria-valuenow={currentTime}

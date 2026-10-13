@@ -61,6 +61,8 @@ export function VideoPreview({ file, seekTo, onTimeUpdate, videoRef: externalRef
   return (
     <div className="rounded-xl overflow-hidden border border-[#1e2d45] bg-black">
       <video
+        key={objectUrl}
+        src={objectUrl}
         ref={videoEl as React.RefObject<HTMLVideoElement>}
         className="w-full aspect-video object-contain"
         onTimeUpdate={(e) => {
@@ -73,7 +75,6 @@ export function VideoPreview({ file, seekTo, onTimeUpdate, videoRef: externalRef
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
       >
-        <source src={objectUrl} type={file.type || 'video/mp4'} />
         Your browser does not support the video element.
       </video>
 

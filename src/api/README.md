@@ -1,87 +1,65 @@
-# Accident-Intel FastAPI Backend
+# Accident-Intel video API
 
-## Running the server
-
-From the project root (`Accident_Intel/`):
+Run from `Accident_Intel/`:
 
 ```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+uv sync --locked
+.venv/bin/python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-Interactive API docs are available at **http://localhost:8000/docs** once the server is running.
+Use one backend worker: the inference queue and local model caches live in that process.
+Jobs run after the upload request returns, with persistent status and intermediate results in SQLite.
+On restart, interrupted jobs become failed and can be retried from the UI.
 
----
+The React UI (port 5173) proxies `/api` to port 8000. Leave `VITE_API_BASE_URL` empty when using
+Lightning Studio so the browser uses the Studio URL rather than its own localhost.
+For a separate frontend host, set it to the publicly reachable backend origin and configure CORS.
 
-## Mock flags
+## Model configuration
 
-All heavy ML components have a mock mode controlled by environment variables (or a `.env` file).
-The defaults are safe for local development without GPU or model weights.
+All `TRACKING_MOCK`, `VLM_MOCK`, `RAG_MOCK`, `REASONING_MOCK`, and `DAMAGE_MOCK` flags default to
+`false`. Explicit mock stages label the resulting accident record as demo data. Failures never
+substitute sample accident results. The existing project `.env` is read from the project root.
 
-| Env var | Default | What it does when `true` |
-|---|---|---|
-| `VLM_MOCK` | `true` | Returns a realistic pre-written accident description instead of running Qwen2-VL |
-| `TRACKING_MOCK` | `true` | Returns synthetic vehicle trajectories instead of running YOLO tracking |
-| `REASONING_MOCK` | `false` | Returns a pre-written liability assessment instead of calling OpenAI |
-| `RAG_MOCK` | `false` | Returns three hardcoded law sections instead of querying the vector index |
-| `DAMAGE_MOCK` | `true` | Returns a synthetic cost report instead of running the damage pipeline |
+- Tracking: YOLO11x + BoT-SORT, `TRACKING_MODEL_PATH=yolo11x.pt`. Weights download on first use.
+  `lap` is required by BoT-SORT and is declared in the dependency files.
+- Local visual model: `VLM_API=local`, `VLM_MODEL_ID=Qwen/Qwen2-VL-7B-Instruct`. GPU strongly recommended.
+- Hosted visual model: `VLM_API=openai`, `VLM_BASE_URL`, `VLM_MODEL`, `VLM_API_KEY`.
+  The model must accept images. `VLM_N_FRAMES` (default 16) controls sampled frames.
+  Hosted frames are grouped into timestamped contact sheets with at most `VLM_MAX_IMAGES`
+  images (default 3, matching the configured provider's limit). Adjust for your provider. `VLM_MAX_TOKENS` defaults to 1400; optional `VLM_EXTRA_PARAMS` is JSON.
+- Retrieval: `RAG_OUT_DIR=out` must contain `parents.json` and `children.jsonl`.
+  Hybrid dense/BM25 retrieval with reranking is the default; an empty dense index is built on first use.
+  `RAG_MODE=bm25` and `RAG_RERANK=false` explicitly select a lighter configuration without embedding downloads.
+- Reasoning: `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and `REASONING_MODEL` (default `gpt-4o-mini`).
+  Existing OpenRouter keys automatically use its endpoint. The visual description, bounded tracking
+  summary, retrieved passages, and unverified user context are passed to the reasoning model.
 
-Set any flag to `false` to enable the real model.
+`DATA_DIR` and `DB_PATH` configure storage; defaults are `out` and `out/accident_intel.db` under
+this project. `MAX_UPLOAD_MB` defaults to 500. The backend checks size, format, metadata, and
+frame decoding before accepting MP4, MOV, or WebM uploads. H.264 MP4 or WebM is recommended
+for browser playback; unsupported browser codecs show a playback error without hiding analysis.
 
----
+## Upload workflow
 
-## Required environment variables (real mode)
+1. `POST /api/accidents/upload` with multipart `file` and optional `location`, `incident_date`,
+   `description`, `notes`. Returns a saved record and video metadata.
+2. `POST /api/accidents/{id}/analyze` queues the job. Duplicate starts return 409.
+3. `GET /api/accidents/{id}/status` reports `processing`, `tracking`, `vlm_analysis`,
+   `law_retrieval`, `reasoning`, `completed`, or `failed`.
+4. `GET /api/accidents/{id}` includes available results, demo provenance, and any stage error.
+   `GET /api/accidents/{id}/video` supports browser range requests and seeking.
+5. Retry a failed job with the same analyze endpoint. Its stale results and error are cleared.
 
-| Var | Used by |
-|---|---|
-| `OPENAI_API_KEY` | Reasoning service (GPT-4o-mini by default) |
-| `GEMINI_API_KEY` | Optional PriceAgent in damage estimation |
-| `REASONING_MODEL` | OpenAI model name (default: `gpt-4o-mini`) |
-| `GEMINI_MODEL` | Gemini model name (default: `gemini-1.5-flash`) |
-| `VLM_MODEL_ID` | Hugging Face model ID (default: `Qwen/Qwen2-VL-7B-Instruct`) |
-| `VLM_N_FRAMES` | Frames sampled from video (default: `32`) |
-| `VLM_MAX_TOKENS` | Max tokens for VLM response (default: `700`) |
-| `RAG_OUT_DIR` | Path to the RAG index directory (default: `out`) |
-| `DB_PATH` | SQLite database path (default: `out/accident_intel.db`) |
+`GET /api/health` reports server health and real/demo configuration for each pipeline stage.
+Interactive endpoint documentation: `/docs`.
 
----
+## Verification
 
-## API endpoints
+```bash
+uv run --with pytest python -m pytest tests -q
+cd frontend && npm run build
+```
 
-### Health
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Server health check |
-
-### Accidents
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/accidents` | List accidents (paginated; query: `page`, `limit`, `status`) |
-| `POST` | `/api/accidents` | Create a new accident record |
-| `GET` | `/api/accidents/{id}` | Get a single accident record |
-| `POST` | `/api/accidents/{id}/video` | Upload a video file (multipart) |
-| `POST` | `/api/accidents/{id}/analyze` | Trigger the full analysis pipeline (background) |
-| `GET` | `/api/accidents/{id}/tracking` | Retrieve vehicle tracking data |
-| `GET` | `/api/accidents/{id}/description` | Retrieve VLM accident description |
-| `GET` | `/api/accidents/{id}/laws` | Retrieve retrieved traffic law sections |
-| `GET` | `/api/accidents/{id}/report` | Retrieve liability reasoning report |
-
-### Damage assessments
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/damage-assessments` | Create a new damage assessment |
-| `POST` | `/api/damage-assessments/{id}/images` | Upload one or more images (multipart) |
-| `POST` | `/api/damage-assessments/{id}/estimate` | Trigger cost estimation (background) |
-| `GET` | `/api/damage-assessments/{id}` | Get assessment result |
-
-### Laws
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/laws` | Search law sections (query: `q`, `jurisdiction`, `topic`, `limit`) |
-| `GET` | `/api/laws/{section_id}` | Look up a specific law section |
-
----
-
-## Swagger UI
-
-Visit **http://localhost:8000/docs** for the interactive Swagger UI.
-ReDoc is available at **http://localhost:8000/redoc**.
+Integration tests decode generated videos and exercise the real adapter contracts with model
+boundaries replaced by test doubles; they require no GPU, provider requests, or model downloads.

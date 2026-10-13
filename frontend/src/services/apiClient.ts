@@ -1,21 +1,19 @@
 // API client — Axios instance + typed helpers for Accident-Intel
-// Demo mode is enabled unless explicitly disabled. This makes a fresh clone
-// usable without requiring a running FastAPI server.
+// Live API is the default. Demo fixtures require an explicit opt-in.
 
 import axios, {
   type AxiosInstance,
   type AxiosResponse,
-  type InternalAxiosRequestConfig,
 } from 'axios';
 
 // ---------------------------------------------------------------------------
 // Environment flags
 // ---------------------------------------------------------------------------
 
-export const isMockMode: boolean = import.meta.env.VITE_USE_MOCK !== 'false';
+export const isMockMode: boolean = import.meta.env.VITE_USE_MOCK === 'true';
 
 const BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+  (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -26,26 +24,20 @@ const client: AxiosInstance = axios.create({
   timeout: 30_000,
 });
 
-// Request interceptor — attach Content-Type for JSON payloads
-client.interceptors.request.use(
-  (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
-    if (!config.headers['Content-Type']) {
-      config.headers['Content-Type'] = 'application/json';
-    }
-    return config;
-  },
-  (error: unknown) => Promise.reject(error),
-);
+/** Same origin in Studio; an explicit base URL also applies to video playback. */
+export function apiUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
 
 // Response interceptor — normalize errors into a consistent shape
 client.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: unknown) => {
     if (axios.isAxiosError(error)) {
-      const message: string =
-        (error.response?.data as { detail?: string })?.detail ??
-        error.message ??
-        'An unknown API error occurred';
+      const detail: unknown = error.response?.data?.detail;
+      const message = typeof detail === 'string' ? detail
+        : Array.isArray(detail) ? detail.map((item) => item.msg ?? 'Invalid input').join('; ')
+        : error.message || 'An unknown API error occurred';
       return Promise.reject(new Error(message));
     }
     return Promise.reject(error);
@@ -71,7 +63,7 @@ export async function post<T>(url: string, body?: unknown): Promise<T> {
 /** POST request with a FormData (multipart) body — returns unwrapped response data */
 export async function postForm<T>(url: string, formData: FormData): Promise<T> {
   const response = await client.post<T>(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 15 * 60_000, // Large videos may take several minutes to upload.
   });
   return response.data;
 }

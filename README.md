@@ -44,7 +44,7 @@ flowchart TD
     K --> U
 ```
 
-The repository currently contains the main analysis components as runnable modules. The end-to-end upload flow, unified web UI/history, and a production orchestration layer are the intended integration surface.
+The React UI and FastAPI backend connect uploads to tracking, visual analysis, law retrieval, and reasoning. Progress, intermediate results, and reports persist in SQLite. See [the backend setup](src/api/README.md) for model configuration and startup instructions.
 
 ## Repository layout
 
@@ -183,9 +183,8 @@ RAG evaluation assets are in `evaluation/rag_evaluation/`, including a RAGAS tes
 
 ## Roadmap
 
-- Connect the current modules behind one upload-to-report workflow.
 - Add calibrated speed estimation and explicit uncertainty bounds.
-- Persist analysis history, artifacts, and reviewer edits in the web UI.
+- Add persistent reviewer edits to the existing analysis history.
 - Add source-video timestamps to every material observation and report claim.
 - Expand benchmark coverage for model latency, token use, retrieval quality, and human-review agreement.
 
