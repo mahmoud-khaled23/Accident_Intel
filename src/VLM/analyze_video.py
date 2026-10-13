@@ -113,6 +113,7 @@ def parse_args():
     )
     p.add_argument("--with-tracking", action="store_true",
                    help="Shortcut for --paradigm with-tracking.")
+    p.add_argument("--trajectories", help="Path to precomputed trajectories.json file (skips re-running tracker).")
     p.add_argument("--use-annotated-video", action="store_true", default=True,
                    help="Feed the tracker's annotated video (with bounding boxes, track IDs, traces) into the VLM in Paradigm 2 (default: True).")
     p.add_argument("--raw-video-only", action="store_true",
@@ -447,7 +448,7 @@ def run_paradigm_with_tracking(
     trajectories = None
     tracked_video_p = None
 
-    if args.trajectories:
+    if getattr(args, "trajectories", None):
         print(f"[Tracker] Loading precomputed trajectories from {args.trajectories}...")
         import json
         with open(args.trajectories, "r", encoding="utf-8") as f:
