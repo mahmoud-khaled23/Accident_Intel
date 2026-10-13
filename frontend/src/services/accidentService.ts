@@ -258,7 +258,8 @@ function mapBackendLaws(rawLaws: BackendLaw[] | null | undefined): TrafficLaw[] 
     section: l.section_id ?? '',
     excerpt: l.content ?? '',
     fullText: l.content ?? '',
-    sourceUrl: '',
+    // Use source URL from metadata when available; undefined lets the UI hide the link
+    sourceUrl: ((l.metadata as Record<string, unknown>)?.source_url as string | undefined) || undefined,
     topics: [],
     relevanceScore: l.score,
   }));

@@ -122,6 +122,7 @@ export function LegalCitationCard({ law }: LegalCitationCardProps) {
               </>
             )}
           </Button>
+          {law.sourceUrl && (
           <a
             href={law.sourceUrl}
             target="_blank"
@@ -130,6 +131,7 @@ export function LegalCitationCard({ law }: LegalCitationCardProps) {
           >
             Official source <ExternalLink className="h-3 w-3" />
           </a>
+          )}
           {law.effectiveDate && (
             <span className="text-xs text-slate-500">Effective: {law.effectiveDate}</span>
           )}

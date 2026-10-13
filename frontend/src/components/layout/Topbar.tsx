@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, Sun, Moon, User, Settings, LogOut } from 'lucide-react';
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ pageTitle, onMenuClick }: TopbarProps) {
+  const navigate = useNavigate();
   const [isDark, setIsDark] = useState<boolean>(() => {
     const stored = localStorage.getItem('accident-intel-theme');
     return stored !== 'light';
@@ -111,17 +113,20 @@ export function Topbar({ pageTitle, onMenuClick }: TopbarProps) {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => console.log('Profile clicked')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
               <User className="h-4 w-4" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => console.log('Settings clicked')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="h-4 w-4" />
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => console.log('Sign out clicked')}
+              onClick={() => {
+                // Sign Out is not implemented in demo mode — navigate to dashboard
+                navigate('/dashboard');
+              }}
               className="text-danger focus:text-danger"
             >
               <LogOut className="h-4 w-4" />

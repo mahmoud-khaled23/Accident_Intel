@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react';
 import { Check, Download, Printer, RotateCcw, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -94,6 +94,17 @@ export function DamageEstimatorPage() {
   const [step, setStep] = useState<StepIndex>(0);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
+  // Stable blob URLs for image previews — revoked on imageFiles change to prevent memory leaks
+  const imageBlobUrls = useMemo(
+    () => imageFiles.map((f) => URL.createObjectURL(f)),
+    [imageFiles],
+  );
+  useEffect(() => {
+    return () => {
+      imageBlobUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageBlobUrls]);
+
   const [vehicleInfo, setVehicleInfo] = useState<Partial<VehicleInfo>>({
     make: '',
     model: '',
@@ -162,6 +173,9 @@ export function DamageEstimatorPage() {
   }
 
   function goPrev() {
+    // If going back to step 1 (image upload), clear the assessment so a fresh
+    // one is triggered when the user advances again with updated images/vehicle info.
+    if (step === 2) setRecord(null);
     setStep((prev) => Math.max(prev - 1, 0) as StepIndex);
   }
 
@@ -442,10 +456,10 @@ export function DamageEstimatorPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                      {imageFiles.map((file, i) => (
+                      {imageFiles.map((_file, i) => (
                         <img
                           key={i}
-                          src={URL.createObjectURL(file)}
+                          src={imageBlobUrls[i]}
                           alt={`Vehicle image ${i + 1}`}
                           className="w-full aspect-square object-cover rounded-lg border border-[#1e2d45]"
                         />

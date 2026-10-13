@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Car,
@@ -43,6 +43,8 @@ import { Badge } from '@/components/ui/badge';
 
 import { MOCK_ACCIDENTS } from '@/mocks/accidentMocks';
 import { MOCK_DAMAGE_ASSESSMENTS } from '@/mocks/damageMocks';
+import { isMockMode } from '@/services/apiClient';
+import { getAccidents } from '@/services/accidentService';
 import type { AccidentRecord } from '@/types/accident';
 import type { AnalysisStatus } from '@/types/common';
 
@@ -181,12 +183,24 @@ const PAGE_SIZE = 5;
 export function DashboardPage() {
   const navigate = useNavigate();
 
+  // ── Data: use real API in live mode, mock data in demo mode ───────────
+  const [accidents, setAccidents] = useState<AccidentRecord[]>(
+    isMockMode ? MOCK_ACCIDENTS : [],
+  );
+
+  useEffect(() => {
+    if (isMockMode) return; // mock data already set above
+    getAccidents(1, 100)
+      .then((res) => setAccidents(res.items))
+      .catch(() => setAccidents([]));
+  }, []);
+
   // ── Derived stats ──────────────────────────────────────────────────────
-  const totalAnalyses = MOCK_ACCIDENTS.length;
-  const reportsGenerated = MOCK_ACCIDENTS.filter(
+  const totalAnalyses = isMockMode ? MOCK_ACCIDENTS.length : accidents.length;
+  const reportsGenerated = accidents.filter(
     (a) => a.status === 'completed',
   ).length;
-  const vehiclesTracked = MOCK_ACCIDENTS.reduce(
+  const vehiclesTracked = accidents.reduce(
     (sum, a) => sum + a.vehicleCount,
     0,
   );
@@ -208,7 +222,8 @@ export function DashboardPage() {
   }
 
   const sortedAccidents = useMemo(() => {
-    const copy = [...MOCK_ACCIDENTS];
+    const source = isMockMode ? MOCK_ACCIDENTS : accidents;
+    const copy = [...source];
     copy.sort((a, b) => {
       let cmp = 0;
       if (sortKey === 'uploadDate') {
@@ -222,7 +237,7 @@ export function DashboardPage() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return copy;
-  }, [sortKey, sortDir]);
+  }, [sortKey, sortDir, accidents]);
 
   const totalPages = Math.ceil(sortedAccidents.length / PAGE_SIZE);
   const pageAccidents = sortedAccidents.slice(
@@ -232,8 +247,9 @@ export function DashboardPage() {
 
   // ── Chart data ─────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
+    const source = isMockMode ? MOCK_ACCIDENTS : accidents;
     const counts: Partial<Record<AnalysisStatus, number>> = {};
-    for (const a of MOCK_ACCIDENTS) {
+    for (const a of source) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
     }
     return (Object.entries(counts) as [AnalysisStatus, number][]).map(
@@ -249,8 +265,8 @@ export function DashboardPage() {
 
   // ── Activity timeline ──────────────────────────────────────────────────
   const activityEvents = useMemo(
-    () => buildActivityEvents(MOCK_ACCIDENTS),
-    [],
+    () => buildActivityEvents(isMockMode ? MOCK_ACCIDENTS : accidents),
+    [accidents],
   );
 
   // ── Sort icon helper ───────────────────────────────────────────────────
@@ -329,7 +345,7 @@ export function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {MOCK_ACCIDENTS.length === 0 ? (
+          {sortedAccidents.length === 0 ? (
             <EmptyState
               icon={<Car className="h-7 w-7" />}
               title="No analyses yet"

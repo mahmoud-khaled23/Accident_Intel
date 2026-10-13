@@ -168,6 +168,7 @@ export function AnalysisHistoryPage() {
     setAllRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
     setToastMessage(`Analysis ${deleteTarget.id} deleted.`);
     setDeleteTarget(null);
+    setDeleteConfirmOpen(false);
   }
 
   // ── Render ───────────────────────────────────────────────────────────

@@ -44,6 +44,9 @@ export function AnalysisDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Controlled tab state — enables programmatic tab switching from OverviewTab
+  const [activeTab, setActiveTab] = useState('overview');
+
   // Tracking tab state
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [overlayEnabled, setOverlayEnabled] = useState(true);
@@ -142,7 +145,7 @@ export function AnalysisDetailsPage() {
       />
 
       {/* Tab navigation */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tracking" disabled={tracks.length === 0}>
@@ -162,7 +165,7 @@ export function AnalysisDetailsPage() {
 
         {/* ── Tab: Overview ─────────────────────────────────────────── */}
         <TabsContent value="overview" className="space-y-6">
-          <OverviewTab record={record} onGoToTab={() => undefined} />
+          <OverviewTab record={record} onGoToTab={setActiveTab} />
         </TabsContent>
 
         {/* ── Tab: Tracking ─────────────────────────────────────────── */}

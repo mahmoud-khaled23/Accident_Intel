@@ -171,7 +171,7 @@ export interface UseNewAnalysisResult {
       description?: string;
       notes?: string;
     },
-  ) => void;
+  ) => Promise<void>;
   reset: () => void;
 }
 
@@ -268,7 +268,9 @@ export function useNewAnalysis(): UseNewAnalysisResult {
   }
 
   // -------------------------------------------------------------------
-  // startAnalysis
+  // startAnalysis — returns a Promise that resolves once the upload
+  // (and trigger) succeed so the caller can safely call advance().
+  // Rejects on upload/trigger failure so the caller can stay on Step 1.
   // -------------------------------------------------------------------
   function startAnalysis(
     file: File,
@@ -278,54 +280,56 @@ export function useNewAnalysis(): UseNewAnalysisResult {
       description?: string;
       notes?: string;
     },
-  ) {
+  ): Promise<void> {
     if (isMockMode) {
-      // Mock flow: simulate upload then jump to completed with demo data
+      // Mock flow: simulate upload step, then continue asynchronously
       setStep('uploading');
-      void (async () => {
-        try {
-          await mockDelay(800);
-          setStep('tracking');
-          await mockDelay(1000);
-          setStep('vlm_analysis');
-          await mockDelay(800);
-          setStep('law_retrieval');
-          await mockDelay(600);
-          setStep('reasoning');
-          await mockDelay(800);
+      return (async () => {
+        await mockDelay(800);
+        // Resolve here — the caller calls advance(); the rest runs in bg
+        void (async () => {
+          try {
+            setStep('tracking');
+            await mockDelay(1000);
+            setStep('vlm_analysis');
+            await mockDelay(800);
+            setStep('law_retrieval');
+            await mockDelay(600);
+            setStep('reasoning');
+            await mockDelay(800);
 
-          const mockRecord = MOCK_ACCIDENTS[0];
-          const mockId = `MOCK-${String(Date.now()).slice(-4)}`;
-          setAccidentId(mockId);
-          setTrackingData(mockRecord.tracks ?? null);
-          setVlmAnalysis(mockRecord.vlmAnalysis ?? null);
-          setLaws(MOCK_TRAFFIC_LAWS.slice(0, 4));
-          setLiabilityReport(mockRecord.liabilityAssessment ?? null);
-          setStep('completed');
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Mock analysis failed');
-          setStep('failed');
-        }
+            const mockRecord = MOCK_ACCIDENTS[0];
+            const mockId = `MOCK-${String(Date.now()).slice(-4)}`;
+            setAccidentId(mockId);
+            setTrackingData(mockRecord.tracks ?? null);
+            setVlmAnalysis(mockRecord.vlmAnalysis ?? null);
+            setLaws(MOCK_TRAFFIC_LAWS.slice(0, 4));
+            setLiabilityReport(mockRecord.liabilityAssessment ?? null);
+            setStep('completed');
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Mock analysis failed');
+            setStep('failed');
+          }
+        })();
       })();
-      return;
     }
 
-    // Real mode
+    // Real mode — resolve only after upload + triggerAnalysis succeed
     setStep('uploading');
-    void (async () => {
-      try {
-        const record = await uploadVideo(file, metadata);
-        setAccidentId(record.id);
-        setStep('analyzing');
+    return (async () => {
+      const record = await uploadVideo(file, metadata);
+      setAccidentId(record.id);
+      setStep('analyzing');
 
-        await triggerAnalysis(record.id);
-        startPolling(record.id);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload or trigger failed';
-        setError(msg);
-        setStep('failed');
-      }
-    })();
+      await triggerAnalysis(record.id);
+      startPolling(record.id);
+      // Promise resolves here — caller can safely call advance()
+    })().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Upload or trigger failed';
+      setError(msg);
+      setStep('failed');
+      throw err; // re-throw so caller stays on Step 1
+    });
   }
 
   return {

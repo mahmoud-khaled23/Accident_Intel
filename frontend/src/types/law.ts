@@ -9,7 +9,7 @@ export interface TrafficLaw {
   excerpt: string; // short quotable passage
   fullText: string; // complete text of the provision
   whyApplies?: string; // AI-generated explanation of relevance to the accident
-  sourceUrl: string; // official publication URL
+  sourceUrl?: string; // official publication URL (undefined = not available)
   effectiveDate?: string; // ISO 8601 date string
   relevanceScore?: number; // 0–1, returned by RAG retrieval
   topics: string[]; // e.g. ["right-of-way", "intersection"]

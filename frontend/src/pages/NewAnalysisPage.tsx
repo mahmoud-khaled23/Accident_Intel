@@ -368,8 +368,11 @@ export function NewAnalysisPage() {
                 incidentDate: metadata.incidentDate || undefined,
                 description: metadata.description || undefined,
                 notes: metadata.notes || undefined,
+              }).then(() => {
+                advance();
+              }).catch(() => {
+                // error is shown via analysisError banner — stay on Step 1
               });
-              advance();
             }
           }}
           disabled={!videoFile || analysisStep === 'uploading'}

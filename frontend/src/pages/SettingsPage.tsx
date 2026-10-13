@@ -367,7 +367,12 @@ export function SettingsPage() {
         confirmLabel="Clear History"
         variant="danger"
         onConfirm={() => {
-          console.log('Clearing local analysis history (demo)');
+          // Clear all localStorage keys used by the app
+          const keysToRemove = Object.keys(localStorage).filter(
+            (k) => k.startsWith('accident-intel'),
+          );
+          keysToRemove.forEach((k) => localStorage.removeItem(k));
+          setConfirmClearOpen(false);
         }}
       />
 
