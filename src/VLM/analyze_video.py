@@ -85,7 +85,7 @@ def parse_args():
                    help="'json' = structured checklist prompt, 'report' = traffic analysis prompt")
     p.add_argument("--prompt-file", help="Text file with a custom prompt (overrides --prompt-mode)")
     p.add_argument("--n-frames", type=int, default=32, help="Number of sampled frames")
-    p.add_argument("--max-new-tokens", type=int, default=700, help="Max generated tokens")
+    p.add_argument("--max-new-tokens", type=int, default=1024, help="Max generated tokens (default: 1024)")
     p.add_argument("--model-id", default=DEFAULT_MODEL_ID,
                    help="Model ID (e.g. Qwen/Qwen2-VL-7B-Instruct or Qwen/Qwen2-VL-2B-Instruct)")
     p.add_argument("--torch-dtype", choices=["auto", "bfloat16", "float16", "float32"], default="auto",
