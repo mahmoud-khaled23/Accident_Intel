@@ -113,9 +113,14 @@ def parse_args():
     )
     p.add_argument("--with-tracking", action="store_true",
                    help="Shortcut for --paradigm with-tracking.")
-    p.add_argument("--trajectories", help="Path to precomputed trajectories.json file (skips re-running tracker).")
-    p.add_argument("--use-annotated-video", action="store_true",
-                   help="Feed the tracker's annotated video (with bounding boxes, track IDs, traces) into the VLM.")
+    p.add_argument("--use-annotated-video", action="store_true", default=True,
+                   help="Feed the tracker's annotated video (with bounding boxes, track IDs, traces) into the VLM in Paradigm 2 (default: True).")
+    p.add_argument("--raw-video-only", action="store_true",
+                   help="Force Paradigm 2 to use raw unannotated video instead of the annotated video.")
+    p.add_argument("--smart-sampling", action="store_true", default=True,
+                   help="Concentrate frame sampling around detected candidate events (default: True).")
+    p.add_argument("--no-smart-sampling", action="store_true",
+                   help="Disable smart event-biased frame sampling and use uniform sampling.")
     p.add_argument("--yolo-model", default="yolo11x.pt",
                    help="YOLO model path or weights for tracking (default: yolo11x.pt).")
     p.add_argument("--repetition-penalty", type=float, default=1.15,
@@ -229,6 +234,111 @@ def get_video_duration(video_path: str) -> float:
     return duration_s
 
 
+def compute_smart_frame_indices(
+    total_frames: int,
+    fps: float,
+    event_times: list[float] | None = None,
+    n_frames: int = 32,
+    window_before: float = 2.0,
+    window_after: float = 2.5,
+) -> list[int]:
+    """Compute exactly n_frames indices with event-window concentration."""
+    if total_frames <= n_frames:
+        return list(range(total_frames))
+
+    if not event_times:
+        return [int(round(i * (total_frames - 1) / (n_frames - 1))) for i in range(n_frames)]
+
+    t_event = event_times[0]
+    duration_s = total_frames / fps if fps > 0 else 0.0
+
+    w_start = max(0.0, t_event - window_before)
+    w_end = min(duration_s, t_event + window_after)
+
+    start_f = max(0, int(w_start * fps))
+    end_f = min(total_frames - 1, int(w_end * fps))
+
+    n_event = n_frames // 2
+    n_global = n_frames - n_event
+
+    global_indices = set(int(round(i * (total_frames - 1) / (n_global - 1))) for i in range(n_global))
+    if end_f > start_f:
+        event_indices = set(int(round(start_f + i * (end_f - start_f) / (n_event - 1))) for i in range(n_event))
+    else:
+        event_indices = set()
+
+    combined = sorted(global_indices | event_indices)
+
+    # If count is less than n_frames, fill in from event window
+    if len(combined) < n_frames:
+        for f in range(start_f, end_f + 1):
+            if f not in combined:
+                combined.append(f)
+            if len(combined) == n_frames:
+                break
+
+    # If still less, fill from all frames
+    if len(combined) < n_frames:
+        for f in range(total_frames):
+            if f not in combined:
+                combined.append(f)
+            if len(combined) == n_frames:
+                break
+
+    combined.sort()
+
+    # If greater, take evenly spaced subset of size n_frames
+    if len(combined) > n_frames:
+        indices = [combined[int(round(i * (len(combined) - 1) / (n_frames - 1)))] for i in range(n_frames)]
+        return sorted(list(dict.fromkeys(indices)))
+
+    return combined
+
+
+def create_event_biased_clip(
+    input_video: str,
+    output_clip: str,
+    event_times: list[float] | None = None,
+    n_frames: int = 32,
+) -> str:
+    """Extract exactly n_frames with event-window concentration and save as a compact MP4 clip."""
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return input_video
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    if total_frames <= n_frames or width <= 0 or height <= 0:
+        cap.release()
+        return input_video
+
+    indices = compute_smart_frame_indices(total_frames, fps, event_times, n_frames=n_frames)
+    target_set = set(indices)
+    max_target = max(indices)
+
+    Path(output_clip).parent.mkdir(parents=True, exist_ok=True)
+    out = cv2.VideoWriter(output_clip, cv2.VideoWriter_fourcc(*"mp4v"), 4.0, (width, height))
+    if not out.isOpened():
+        cap.release()
+        return input_video
+
+    curr_f = 0
+    while curr_f <= max_target:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if curr_f in target_set:
+            out.write(frame)
+        curr_f += 1
+
+    cap.release()
+    out.release()
+    return output_clip
+
+
 def build_prompt(args, duration_s: float, tracking_summary: str | None = None) -> str:
     if args.prompt_file:
         base_prompt = Path(args.prompt_file).read_text(encoding="utf-8")
@@ -283,15 +393,20 @@ def analyze(
     text_prompt = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    image_inputs, video_inputs = process_vision_info(messages)
+    proc_kwargs = {
+        "text": [text_prompt],
+        "images": image_inputs,
+        "videos": video_inputs,
+        "padding": True,
+        "return_tensors": "pt",
+    }
+    if video_inputs is not None:
+        try:
+            proc_kwargs["cap_pixels_per_frame"] = True
+        except Exception:
+            pass
 
-    inputs = processor(
-        text=[text_prompt],
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
+    inputs = processor(**proc_kwargs)
     device = getattr(model, "device", None) or next(model.parameters()).device
     inputs = inputs.to(device)
 
@@ -379,9 +494,33 @@ def run_paradigm_with_tracking(
         print(tracking_summary)
         print("-" * 70)
 
-    video_for_vlm = tracked_video_p if (args.use_annotated_video and tracked_video_p) else video_path
-    if args.use_annotated_video and tracked_video_p:
-        print(f"[Tracker] Using annotated video with bounding boxes for VLM visual input.")
+    use_annotated = (not getattr(args, "raw_video_only", False)) and bool(tracked_video_p)
+    video_for_vlm = tracked_video_p if use_annotated else video_path
+    if use_annotated:
+        print("[Tracker] Using annotated video with bounding boxes & track IDs for VLM visual input.")
+
+    # Smart event-biased temporal zooming
+    is_smart_sampling = getattr(args, "smart_sampling", True) and not getattr(args, "no_smart_sampling", False)
+    if is_smart_sampling and candidates:
+        event_times = []
+        for cand in candidates:
+            if cand.get("overlap_frame") is not None and fps > 0:
+                event_times.append(cand["overlap_frame"] / fps)
+            for d in cand.get("deceleration", {}).values():
+                if d.get("detected") and d.get("frame") is not None and fps > 0:
+                    event_times.append(d["frame"] / fps)
+
+        if event_times:
+            video_p = Path(video_path)
+            smart_clip = str(video_p.parent / f"{video_p.stem}_smart_{args.n_frames}f.mp4")
+            print(f"[Sampling] Generating smart event-biased clip concentrated around {event_times[0]:.2f}s...")
+            video_for_vlm = create_event_biased_clip(
+                video_for_vlm,
+                smart_clip,
+                event_times=event_times,
+                n_frames=args.n_frames,
+            )
+            print(f"[Sampling] Smart event-concentrated clip ready: {smart_clip}")
 
     prompt = build_prompt(args, duration_s, tracking_summary=tracking_summary)
 

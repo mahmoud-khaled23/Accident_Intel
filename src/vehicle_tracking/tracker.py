@@ -88,9 +88,19 @@ def process_video(
         if not out.isOpened():
             raise RuntimeError(f"Could not create output video: {output_video}")
 
-        box_annotator = sv.BoxAnnotator()
-        label_annotator = sv.LabelAnnotator()
-        trace_annotator = sv.TraceAnnotator(trace_length=50, thickness=2)
+        # Adaptive scaling for crisp, high-contrast VLM readability
+        scale = max(0.6, min(1.3, width / 1920.0 * 0.9))
+        box_thickness = max(2, int(scale * 3))
+        text_scale = max(0.55, scale * 0.85)
+        text_thickness = max(1, int(scale * 2))
+
+        box_annotator = sv.BoxAnnotator(thickness=box_thickness)
+        label_annotator = sv.LabelAnnotator(
+            text_scale=text_scale,
+            text_thickness=text_thickness,
+            text_padding=int(scale * 8),
+        )
+        trace_annotator = sv.TraceAnnotator(trace_length=60, thickness=box_thickness)
 
         frame_idx = 0
 
