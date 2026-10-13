@@ -1,9 +1,11 @@
 """Prompts for the CCTV accident analyzer."""
 
 SYSTEM_PROMPT = (
-    "You are a careful CCTV traffic-incident analyst. You write detailed reports "
+    "You are a careful CCTV traffic-incident forensic analyst. You write detailed reports "
     "that contain only what is clearly visible in the frames. When something is "
-    'not clearly visible, you write "unclear" instead of guessing.'
+    'not clearly visible, you write "unclear" instead of guessing. '
+    "STRICT LANGUAGE REQUIREMENT: Output your entire report exclusively in fluent, formal English. "
+    "Never output Chinese characters, glyphs, or phrases under any circumstances."
 )
 
 _ACCIDENT_TEMPLATE = """This is footage from a fixed CCTV traffic camera. {N} frames were sampled evenly from a {D}-second clip, so the footage may be blurry, low resolution, or miss fast events.
@@ -178,6 +180,7 @@ VISUAL EVIDENCE RULES
    explicitly state that it cannot be established.
 9. Do not interpret missing visual evidence as proof that an event did not occur.
 10. Never invent intermediate actions to connect separate observations.
+11. STRICT LANGUAGE: Output exclusively in fluent English. Never output Chinese characters, glyphs, or translations under any circumstances.
 
 TEMPORAL ANALYSIS
 Inspect the entire available video and describe only meaningful changes
@@ -208,8 +211,9 @@ For each item, distinguish:
 
 Use "clearly observed" only when supported by specific visual evidence.
 Do not label an event as a collision based solely on proximity.
-Do not conclude that no incident occurred merely because the critical
-moment is absent from the sampled frames.
+Carefully distinguish between:
+- Direct Physical Collision: Observable bodily impact or vehicle deformation (crushed panels, direct hit).
+- Near-Miss / Emergency Avoidance: Hard braking or swerving where vehicles stop short of contact, a pedestrian crosses safely without contact, and vehicles resume driving unharmed.
 
 TRAFFIC INFRASTRUCTURE
 Describe traffic lights, signs, lane markings, and road layout only
@@ -223,10 +227,10 @@ Scene Overview:
 Describe the environment, road layout, and visible road users. If tracking telemetry is provided, identify each primary road user with its Track ID in parentheses (e.g. "the white van (Vehicle ID 2)", "the leading car (Vehicle ID 1)").
 
 Chronological Events:
-Reconstruct observable events in chronological order. Group observations into phases with approximate timestamp brackets grounded in the footage and telemetry, for example:
-- [0.00s - 0.83s]: Initial traffic flow, vehicle positioning, and approach speeds...
-- [0.83s - 1.80s]: Sudden speed change, emergency braking, interaction, or impact event...
-- [1.80s - End]: Immediate aftermath, post-impact trajectory, and secondary reactions...
+Reconstruct observable events in chronological order. Group observations into distinct phases with timestamp brackets grounded in the footage and telemetry:
+- [Start_Time - Interaction_Time]: Initial traffic flow, vehicle positioning, and approach speeds...
+- [Interaction_Time - Aftermath_Time]: Sudden speed change, emergency braking, interaction, or impact event...
+- [Aftermath_Time - End_Time]: Immediate aftermath, post-impact trajectory, and secondary reactions...
 
 Incident Evidence:
 Systematically evaluate:
@@ -245,11 +249,12 @@ Verdict Summary:
 - Incident Detected: [YES / NO / SUSPECTED]
 - Primary Classification: [Multi-Vehicle Collision / Single-Vehicle Crash / Near-Miss / Routine Traffic / Loss of Control]
 - Primary Vehicles Involved: [List Vehicle IDs with visual descriptions, or "None"]
-- Critical Incident Timestamp: [e.g. ~0.83s or "N/A"]
+- Critical Incident Timestamp: [Exact second matching the telemetry incident timestamp, or "N/A"]
 - Summary: 1-2 sentence forensic conclusion citing the key visible evidence.
 
 FINAL CONSTRAINT
 Accuracy is more important than completeness.
 If the footage does not establish that an incident occurred, say so.
 Never invent a narrative to make the video appear more meaningful.
+Output 100% of the report in English with zero Chinese characters.
 """

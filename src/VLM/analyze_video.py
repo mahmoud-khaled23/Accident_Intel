@@ -466,6 +466,7 @@ def build_prompt(
 
     phase_guide = ""
     if window_info and window_info.get("triggered"):
+        t_event = window_info.get("t_event", 0.0)
         pre_w = window_info.get("pre_window_s", [0.0, 0.0])
         imp_w = window_info.get("impact_window_s", [0.0, 0.0])
         post_w = window_info.get("post_window_s", [0.0, 0.0])
@@ -474,13 +475,16 @@ def build_prompt(
             "======================================================================\n"
             "EVENT-TRIGGERED 3-PHASE TEMPORAL BREAKDOWN (SLOW-MOTION CAMERA SAMPLES):\n"
             f"- Primary Incident Involves: {vids or 'Tracked Vehicles'}\n"
-            f"- Phase 1 (Pre-Crash Approach, [{pre_w[0]:.2f}s - {pre_w[1]:.2f}s]): "
-            "Analyze driver approach vectors, lane position, speed buildup, right-of-way, or traffic violations.\n"
-            f"- Phase 2 (Dense Impact Slow-Mo, [{imp_w[0]:.2f}s - {imp_w[1]:.2f}s]): "
-            "Examine physical contact point, deformation, angle of impact, or evasive braking.\n"
-            f"- Phase 3 (Post-Crash Aftermath, [{post_w[0]:.2f}s - {post_w[1]:.2f}s]): "
-            "Observe final vehicle positions, rollover/spin trajectory, debris, and hazards.\n"
-            "In your 'Chronological Events' section, organize your analysis strictly following these three distinct phases.\n"
+            f"- Ground Truth Incident Time: ~{t_event:.2f}s in video timeline\n\n"
+            "MANDATORY TIMESTAMP GROUNDING FOR 'Chronological Events':\n"
+            "Structure your chronological analysis using EXACTLY these three phase brackets:\n"
+            f"#### [{pre_w[0]:.2f}s - {pre_w[1]:.2f}s]: Pre-Crash Approach Phase\n"
+            "Analyze driver approach vectors, lane position, speed buildup, right-of-way, crosswalk pedestrians, or traffic violations.\n\n"
+            f"#### [{imp_w[0]:.2f}s - {imp_w[1]:.2f}s]: Critical Interaction / Impact Phase\n"
+            f"(Centering on the ~{t_event:.2f}s critical moment): Examine whether physical contact occurred or if vehicles executed emergency avoidance braking. Detail vehicle body contact or near-miss separation.\n\n"
+            f"#### [{post_w[0]:.2f}s - {post_w[1]:.2f}s]: Post-Event Aftermath Phase\n"
+            "Observe final vehicle positions, rollover/spin trajectory, whether vehicles resumed motion, debris, and hazards.\n\n"
+            f"In your 'Verdict Summary' section, set 'Critical Incident Timestamp:' to ~{t_event:.2f}s.\n"
             "======================================================================\n\n"
         )
 
@@ -496,12 +500,13 @@ def build_prompt(
             "'the leading black car (Vehicle ID 1)', 'the blue truck (Vehicle ID 9)'). Never refer to a tracked vehicle without its Vehicle ID.\n"
             "2. OBJECT PERMANENCE: The Track IDs above track the SAME physical entities over time. Do NOT invent phantom vehicles "
             "or claim an overturned vehicle is a separate car from the one tracked in that lane.\n"
-            "3. TIMESTAMP ANCHORING: In 'Chronological Events', structure each event phase with timestamp brackets grounded "
-            "in the telemetry and clip duration (e.g. '[0.00s - 0.83s]: ...', '[0.83s - 1.80s]: ...').\n"
+            "3. TIMESTAMP ANCHORING: In 'Chronological Events', structure each event phase strictly using the real phase timestamp brackets "
+            "specified in the telemetry above. Never use placeholder or hardcoded timestamps.\n"
             "4. KINEMATIC SYNCHRONIZATION: Cross-reference your deceleration and interaction descriptions with the measured speed drops "
             "and collision alerts flagged in the telemetry above.\n"
             "5. VERDICT SUMMARY: Complete the required Verdict Summary section at the end of the report, specifying the involved Vehicle IDs.\n"
-            "6. NO REPETITIVE LOOPS: State observations clearly and concisely without looping or repeating sentences.\n\n"
+            "6. NO REPETITIVE LOOPS: State observations clearly and concisely without looping or repeating sentences.\n"
+            "7. STRICT ENGLISH ONLY: Generate the entire report exclusively in fluent English. Under no circumstances output Chinese characters, glyphs, or phrases.\n\n"
         )
         return telemetry_block + phase_guide + base_prompt
     return phase_guide + base_prompt
