@@ -33,18 +33,7 @@ def search_laws(
             return LawSearchResponse(results=results, query=q, total=len(results))
         return LawSearchResponse(results=[], query=q, total=0)
 
-    try:
-        raw = law_service.retrieve_laws(q, str(settings.rag_out_dir), settings)
-    except Exception as exc:
-        # RAG deps missing (chromadb, sentence-transformers) — fall back to mock
-        import logging
-        logging.getLogger(__name__).warning(
-            "RAG retrieval failed (%s) — falling back to mock laws. "
-            "Install chromadb and sentence-transformers to enable real retrieval.",
-            exc,
-        )
-        from ..services.law_service import _MOCK_LAWS
-        raw = _MOCK_LAWS
+    raw = law_service.retrieve_laws(q, str(settings.rag_out_dir), settings)
 
     results = [
         LawResult(
@@ -61,14 +50,7 @@ def search_laws(
 
 @router.get("/{section_id}", response_model=LawResult)
 def get_law(section_id: str, settings=Depends(get_settings)):
-    try:
-        item = law_service.get_law_by_id(section_id, str(settings.rag_out_dir), settings)
-    except Exception:
-        item = None
-    if item is None:
-        # Try mock index as fallback
-        from ..services.law_service import _MOCK_LAWS_INDEX
-        item = _MOCK_LAWS_INDEX.get(section_id)
+    item = law_service.get_law_by_id(section_id, str(settings.rag_out_dir), settings)
     if item is None:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Law section '{section_id}' not found")

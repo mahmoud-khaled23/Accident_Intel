@@ -75,11 +75,7 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
             return_details=False,
         )
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(
-            "RAG retrieval failed (%s) — falling back to mock laws", exc
-        )
-        return _MOCK_LAWS
+        raise RuntimeError(f"Traffic-law retrieval failed: {exc}") from exc
 
     results = []
     for item in raw:

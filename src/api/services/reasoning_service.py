@@ -119,8 +119,7 @@ def analyze_accident(
         )
         response_text = response.choices[0].message.content or ""
     except Exception as exc:
-        logger.warning("OpenAI reasoning failed (%s) — falling back to mock report", exc)
-        return _MOCK_REPORT
+        raise RuntimeError(f"Reasoning model request failed: {exc}") from exc
 
     # Try to extract JSON from the response
     try:

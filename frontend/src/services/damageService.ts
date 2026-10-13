@@ -5,90 +5,6 @@ import type { DamageAssessmentRecord, VehicleInfo, DamagePart } from '../types/d
 import { MOCK_DAMAGE_ASSESSMENTS } from '../mocks/damageMocks';
 import { isMockMode, mockDelay, get, postForm, post } from './apiClient';
 
-interface BackendCostLine {
-  part?: string;
-  action?: string;
-  damages?: string[];
-  total_min?: number;
-  total_max?: number;
-}
-
-interface BackendDamageResponse {
-  id: string;
-  status: string;
-  vehicle_info?: Record<string, unknown>;
-  images?: string[];
-  cost_report?: {
-    total_min?: number;
-    total_max?: number;
-    currency?: string;
-    lines?: BackendCostLine[];
-    notes?: string[];
-  } | null;
-  created_at?: string;
-}
-
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-function titleCase(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function mapBackendAssessment(
-  response: BackendDamageResponse,
-  suppliedVehicleInfo: VehicleInfo,
-): DamageAssessmentRecord {
-  const report = response.cost_report ?? {};
-  const lines = report.lines ?? [];
-  const lowEstimate = report.total_min ?? 0;
-  const highEstimate = report.total_max ?? lowEstimate;
-  const total = (lowEstimate + highEstimate) / 2;
-
-  return {
-    id: response.id,
-    sessionId: response.id,
-    vehicleInfo: suppliedVehicleInfo,
-    imageUrls: response.images ?? [],
-    damagedParts: lines.map((line, index) => ({
-      id: `${response.id}-part-${index}`,
-      name: titleCase(line.part ?? 'Unknown part'),
-      location: 'Not specified',
-      damageType: (line.damages ?? []).join(', ') || 'Damage detected',
-      severity: /severe/i.test((line.damages ?? []).join(' '))
-        ? 'severe'
-        : /moderate/i.test((line.damages ?? []).join(' '))
-          ? 'moderate'
-          : 'minor',
-      confidence: 0,
-      source: 'ai',
-    })),
-    repairItems: lines.map((line, index) => {
-      const itemLow = line.total_min ?? 0;
-      const itemHigh = line.total_max ?? itemLow;
-      const itemTotal = (itemLow + itemHigh) / 2;
-      return {
-        id: `${response.id}-repair-${index}`,
-        description: `${titleCase(line.part ?? 'Unknown part')}: ${titleCase(line.action ?? 'repair')}`,
-        category: 'other' as const,
-        unitCost: itemTotal,
-        quantity: 1,
-        total: itemTotal,
-      };
-    }),
-    estimate: {
-      subtotal: total,
-      tax: 0,
-      total,
-      lowEstimate,
-      highEstimate,
-      currency: report.currency ?? 'EGP',
-      assumptions: report.notes ?? [],
-      limitations: [],
-    },
-    assessmentDate: response.created_at ?? new Date().toISOString(),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -133,33 +49,19 @@ export async function uploadDamageImages(
     };
     return mockResult;
   }
-  // The backend deliberately separates creation, image upload, and estimation.
-  // Keep that workflow in one client method so the page can remain simple.
-  const created = await post<BackendDamageResponse>('/api/damage-assessments/', {
-    make: vehicleInfo.make,
-    model: vehicleInfo.model,
-    year: vehicleInfo.year,
-    tier: 'mid',
-    currency: 'EGP',
-  });
-
   const formData = new FormData();
-  files.forEach((file) => formData.append('files', file));
-  await postForm<{ message: string }>(`/api/damage-assessments/${created.id}/images`, formData);
-  await post<{ status: string }>(`/api/damage-assessments/${created.id}/estimate`);
+  files.forEach((file) => formData.append('images', file));
+  formData.append('make', vehicleInfo.make);
+  formData.append('model', vehicleInfo.model);
+  formData.append('year', String(vehicleInfo.year));
+  formData.append('color', vehicleInfo.color);
+  if (vehicleInfo.mileage !== undefined) formData.append('mileage', String(vehicleInfo.mileage));
+  if (vehicleInfo.vin) formData.append('vin', vehicleInfo.vin);
+  if (vehicleInfo.repairLocation) formData.append('repair_location', vehicleInfo.repairLocation);
 
-  // Estimation runs in a FastAPI background task. Poll until its cost report is ready.
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    await wait(1_000);
-    const current = await get<BackendDamageResponse>(`/api/damage-assessments/${created.id}`);
-    if (current.status === 'completed' && current.cost_report) {
-      return mapBackendAssessment(current, vehicleInfo);
-    }
-    if (current.status === 'failed') {
-      throw new Error('Damage assessment failed on the server. Check the API logs for details.');
-    }
-  }
-  throw new Error('Damage assessment is taking longer than expected. Please try again shortly.');
+  // This endpoint runs the real damage pipeline and already returns the UI's
+  // DamageAssessmentRecord shape.
+  return postForm<DamageAssessmentRecord>('/api/damage/upload', formData);
 }
 
 /** Apply user-supplied corrections to an existing damage assessment */

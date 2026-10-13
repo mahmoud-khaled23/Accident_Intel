@@ -59,9 +59,9 @@ def _analyze_via_openai_api(video_path: str, settings) -> str:
         raise RuntimeError(f"openai package not installed: {exc}") from exc
 
     # Read VLM config from env — fall back to settings fields
-    vlm_base_url = os.environ.get("VLM_BASE_URL", "").strip() or None
-    vlm_model = os.environ.get("VLM_MODEL", "").strip() or settings.vlm_model_id
-    vlm_api_key = os.environ.get("VLM_API_KEY", "").strip() or ""
+    vlm_base_url = os.environ.get("VLM_BASE_URL", "").strip() or settings.vlm_base_url or None
+    vlm_model = os.environ.get("VLM_MODEL", "").strip() or settings.vlm_model or settings.vlm_model_id
+    vlm_api_key = os.environ.get("VLM_API_KEY", "").strip() or settings.vlm_api_key
 
     client = openai.OpenAI(
         api_key=vlm_api_key or "no-key",
@@ -141,11 +141,7 @@ def analyze_video(video_path: str, accident_id: str, settings) -> str:
         try:
             return _analyze_via_openai_api(video_path, settings)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Hosted VLM call failed (%s) — falling back to mock description", exc
-            )
-            return _MOCK_DESCRIPTION
+            raise RuntimeError(f"Hosted VLM analysis failed: {exc}") from exc
 
     # Local Qwen2-VL path
     global _vlm_model, _vlm_processor
@@ -154,11 +150,7 @@ def analyze_video(video_path: str, accident_id: str, settings) -> str:
         from VLM.analyze_video import load_model, analyze
         from VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
     except ImportError as exc:
-        import logging
-        logging.getLogger(__name__).warning(
-            "VLM package not importable (%s) — falling back to mock description", exc
-        )
-        return _MOCK_DESCRIPTION
+        raise RuntimeError(f"Local VLM package is not importable: {exc}") from exc
 
     try:
         if _vlm_model is None:
@@ -173,8 +165,4 @@ def analyze_video(video_path: str, accident_id: str, settings) -> str:
             settings.vlm_max_tokens,
         )
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Local VLM inference failed (%s) — falling back to mock description", exc
-        )
-        return _MOCK_DESCRIPTION
+        raise RuntimeError(f"Local VLM inference failed: {exc}") from exc

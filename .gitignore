@@ -14,6 +14,8 @@ data/
 .agents
 
 outputs/
+out/
+out/accident_intel.db
 
 Accident_Intel\src\Car_damage_cost\weights/*
 !Accident_Intel\src\Car_damage_cost\weights/.gitkeep
