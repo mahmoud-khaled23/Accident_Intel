@@ -11,7 +11,7 @@ interface TrackingOverlayProps {
   height: number;
 }
 
-const TOLERANCE = 0.15; // seconds — how close a frame timestamp needs to be to currentTime
+const TOLERANCE = 0.5; // seconds — forgiving for sampled tracking frames
 
 export function TrackingOverlay({ tracks, selectedId, currentTime, enabled, width, height }: TrackingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -44,10 +44,13 @@ export function TrackingOverlay({ tracks, selectedId, currentTime, enabled, widt
       if (!closest || minDelta > TOLERANCE) continue;
 
       const { x, y, width: bw, height: bh } = closest.bbox;
-      const px = x * canvas.width;
-      const py = y * canvas.height;
-      const pw = bw * canvas.width;
-      const ph = bh * canvas.height;
+      const isNorm = x <= 1.05 && y <= 1.05 && bw <= 1.05 && bh <= 1.05;
+      const scaleX = isNorm ? canvas.width : canvas.width / (width > 0 ? width : 1);
+      const scaleY = isNorm ? canvas.height : canvas.height / (height > 0 ? height : 1);
+      const px = x * scaleX;
+      const py = y * scaleY;
+      const pw = bw * scaleX;
+      const ph = bh * scaleY;
 
       // Box
       ctx.strokeStyle = track.color;

@@ -1,6 +1,6 @@
 // API client — Axios instance + typed helpers for Accident-Intel
-// When VITE_USE_MOCK=true all service calls return mock data; flip to false
-// to hit the real FastAPI backend.
+// Demo mode is enabled unless explicitly disabled. This makes a fresh clone
+// usable without requiring a running FastAPI server.
 
 import axios, {
   type AxiosInstance,
@@ -12,7 +12,7 @@ import axios, {
 // Environment flags
 // ---------------------------------------------------------------------------
 
-export const isMockMode: boolean = import.meta.env.VITE_USE_MOCK === 'true';
+export const isMockMode: boolean = import.meta.env.VITE_USE_MOCK !== 'false';
 
 const BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';

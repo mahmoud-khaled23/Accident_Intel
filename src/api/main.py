@@ -7,7 +7,9 @@ from pathlib import Path
 _src_dir = str(Path(__file__).parents[2])             # Accident_Intel/
 _src_src_dir = str(Path(__file__).parents[2] / "src") # Accident_Intel/src/
 _car_damage_dir = str(Path(__file__).parents[2] / "src" / "Car_damage_cost")
-for _p in (_src_dir, _src_src_dir, _car_damage_dir):
+_vlm_dir = str(Path(__file__).parents[2] / "src" / "VLM")
+_rag_dir = str(Path(__file__).parents[2] / "src" / "rag")
+for _p in (_src_dir, _src_src_dir, _car_damage_dir, _vlm_dir, _rag_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -91,7 +93,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(accidents_router)
-    app.include_router(damage_router)
+    app.include_router(damage_router, prefix="/api/damage")
+    app.include_router(damage_router, prefix="/api/damage-assessments")
     app.include_router(laws_router)
 
     @app.get("/health", tags=["health"])

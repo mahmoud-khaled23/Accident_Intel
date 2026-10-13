@@ -19,13 +19,21 @@ Usage:
 From another script (for example your analyze_accident.py):
     from report_retrieval import retrieve_for_report
     laws = retrieve_for_report(description, "./out", extra_queries=queries, top_k=8)
+"""
 
 import argparse
 import json
 import re
 from pathlib import Path
 
-from index_and_retrieve import load, retrieve
+try:
+    from rag.retrieval.index_and_retrieve import load, retrieve
+except ImportError:
+    try:
+        from .index_and_retrieve import load, retrieve
+    except ImportError:
+        from index_and_retrieve import load, retrieve
+
 
 # (rule name, regex on the report text, short queries in the law's own wording, anchor section numbers)
 # The order matters: earlier rules get their anchors placed first. Edit freely.
@@ -100,7 +108,6 @@ def _flatten(obj, key=""):
     elif obj is not None and str(obj).strip():
         lines.append(f"{key}: {obj}" if key else str(obj))
     return lines
-"""
 
 
 def json_to_text(obj):

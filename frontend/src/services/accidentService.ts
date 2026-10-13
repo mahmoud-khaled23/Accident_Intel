@@ -28,12 +28,14 @@ import { isMockMode, mockDelay, get, post, postForm, del } from './apiClient';
 
 interface BackendTrackingFrame {
   timestamp?: number;
+  frame?: number;
   vehicle_id?: string;
-  bbox?: { x: number; y: number; width: number; height: number };
+  bbox?: { x: number; y: number; width: number; height: number } | number[];
   confidence?: number;
 }
 
 interface BackendVehicleTrajectory {
+  id?: number | string;
   vehicle_id?: number | string;
   class?: string;
   frames?: BackendTrackingFrame[];
@@ -107,17 +109,40 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
 } {
   if (!raw) return { tracks: [], vehicleCount: 0 };
 
-  const fps = raw.fps ?? 30;
+  const fps = raw.fps && raw.fps > 0 ? raw.fps : 25;
   const trajectories = raw.trajectories ?? [];
 
   const tracks: VehicleTrack[] = trajectories.map((traj, idx) => {
-    const vehicleId = String(traj.vehicle_id ?? idx + 1);
-    const frames: TrackingFrame[] = (traj.frames ?? []).map((f) => ({
-      timestamp: f.timestamp ?? 0,
-      vehicleId,
-      bbox: f.bbox ?? { x: 0, y: 0, width: 0, height: 0 },
-      confidence: f.confidence ?? 0,
-    }));
+    const vehicleId = String(traj.vehicle_id ?? traj.id ?? idx + 1);
+    const frames: TrackingFrame[] = (traj.frames ?? []).map((f) => {
+      const rawFrame = f as BackendTrackingFrame & { frame?: number };
+      const ts =
+        typeof rawFrame.timestamp === 'number'
+          ? rawFrame.timestamp
+          : typeof rawFrame.frame === 'number' && fps > 0
+            ? rawFrame.frame / fps
+            : 0;
+
+      let bbox = { x: 0, y: 0, width: 0, height: 0 };
+      if (Array.isArray(f.bbox) && f.bbox.length === 4) {
+        const [x1, y1, x2, y2] = f.bbox;
+        bbox = {
+          x: x1,
+          y: y1,
+          width: Math.max(0, x2 - x1),
+          height: Math.max(0, y2 - y1),
+        };
+      } else if (f.bbox && typeof f.bbox === 'object') {
+        bbox = f.bbox as { x: number; y: number; width: number; height: number };
+      }
+
+      return {
+        timestamp: parseFloat(ts.toFixed(2)),
+        vehicleId,
+        bbox,
+        confidence: f.confidence ?? 1.0,
+      };
+    });
 
     const timestamps = frames.map((f) => f.timestamp);
     const confidences = frames.map((f) => f.confidence);
@@ -126,11 +151,8 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
         ? confidences.reduce((a, b) => a + b, 0) / confidences.length
         : 0;
 
-    // Convert frame numbers to seconds if values look like frame counts
-    const firstTs = timestamps.length > 0 ? Math.min(...timestamps) : 0;
-    const lastTs = timestamps.length > 0 ? Math.max(...timestamps) : 0;
-    const firstSeen = firstTs > 1000 ? firstTs / fps : firstTs;
-    const lastSeen = lastTs > 1000 ? lastTs / fps : lastTs;
+    const firstSeen = timestamps.length > 0 ? Math.min(...timestamps) : 0;
+    const lastSeen = timestamps.length > 0 ? Math.max(...timestamps) : 0;
 
     return {
       id: vehicleId,

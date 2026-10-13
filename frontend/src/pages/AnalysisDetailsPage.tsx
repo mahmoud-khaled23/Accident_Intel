@@ -196,7 +196,12 @@ export function AnalysisDetailsPage() {
                 </div>
               </div>
               <div className="relative aspect-video rounded-xl overflow-hidden bg-[#0d1525] border border-[#1e2d45] flex items-center justify-center">
-                <p className="text-sm text-slate-500 z-0">Video not available in history view</p>
+                <video
+                  src={`/api/accidents/${id}/video`}
+                  className="w-full h-full object-contain"
+                  controls
+                  onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
+                />
                 <TrackingOverlay
                   tracks={tracks}
                   selectedId={selectedVehicleId}
@@ -206,9 +211,6 @@ export function AnalysisDetailsPage() {
                   height={360}
                 />
               </div>
-              <p className="text-xs text-slate-500 text-center">
-                Demo Tracking Overlay — mock bounding boxes
-              </p>
             </div>
 
             {/* Vehicle list */}

@@ -14,7 +14,10 @@ import torch
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
-from prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
+try:
+    from prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
+except ImportError:
+    from .prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"
 MIN_PIXELS = 256 * 28 * 28

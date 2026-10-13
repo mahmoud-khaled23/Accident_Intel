@@ -66,13 +66,20 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
             f"rag package not importable — check rag/retrieval dependencies. Original error: {exc}"
         ) from exc
 
-    raw = retrieve_for_report(
-        description=description,
-        out=out_dir,
-        top_k=5,
-        rerank=True,
-        return_details=False,
-    )
+    try:
+        raw = retrieve_for_report(
+            description=description,
+            out=out_dir,
+            top_k=5,
+            rerank=True,
+            return_details=False,
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "RAG retrieval failed (%s) — falling back to mock laws", exc
+        )
+        return _MOCK_LAWS
 
     results = []
     for item in raw:

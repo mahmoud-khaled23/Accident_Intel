@@ -44,15 +44,15 @@ cp .env.example .env.local
 | Variable            | Default                    | Description                                         |
 |---------------------|----------------------------|-----------------------------------------------------|
 | `VITE_API_BASE_URL` | `http://localhost:8000`    | Base URL of the FastAPI backend                     |
-| `VITE_MOCK_MODE`    | `true`                     | `true` = local mock data; `false` = real backend    |
+| `VITE_USE_MOCK`     | `true`                     | `true` = local mock data; `false` = real backend    |
 
 ---
 
 ## Mock / Demo Mode
 
-When `VITE_MOCK_MODE=true` (the default), all data comes from local mock files under `src/mocks/`. No network requests are made. Every page shows a **Demo Data** badge. To connect to the real FastAPI backend:
+When `VITE_USE_MOCK=true` (the default), all data comes from local mock files under `src/mocks/`. No network requests are made. Every page shows a **Demo Data** badge. To connect to the real FastAPI backend:
 
-1. Set `VITE_MOCK_MODE=false` in `.env.local`
+1. Set `VITE_USE_MOCK=false` in `.env.local`
 2. Set `VITE_API_BASE_URL` to your backend URL
 3. Restart the dev server
 
@@ -75,7 +75,7 @@ When `VITE_MOCK_MODE=true` (the default), all data comes from local mock files u
 
 ## API Endpoint Reference
 
-When `VITE_MOCK_MODE=false`, the frontend calls the following FastAPI endpoints:
+When `VITE_USE_MOCK=false`, the frontend calls the following FastAPI endpoints:
 
 | Method | Endpoint                      | Description                              |
 |--------|-------------------------------|------------------------------------------|
@@ -83,8 +83,10 @@ When `VITE_MOCK_MODE=false`, the frontend calls the following FastAPI endpoints:
 | GET    | `/api/accidents/:id`          | Fetch a single accident record           |
 | GET    | `/api/accidents`              | List all accident records                |
 | DELETE | `/api/accidents/:id`          | Delete an accident record                |
-| POST   | `/api/damage/upload`          | Upload images to start damage assessment |
-| GET    | `/api/laws/search`            | Search traffic laws (query params: q, jurisdiction, topic) |
+| POST   | `/api/damage-assessments/`    | Create a damage assessment |
+| POST   | `/api/damage-assessments/:id/images` | Upload assessment images |
+| POST   | `/api/damage-assessments/:id/estimate` | Start repair-cost estimation |
+| GET    | `/api/laws/`                  | Search traffic laws (query params: q, jurisdiction, topic) |
 
 ---
 

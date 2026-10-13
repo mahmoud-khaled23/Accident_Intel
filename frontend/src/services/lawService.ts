@@ -113,5 +113,21 @@ export async function getLaw(id: string): Promise<TrafficLaw> {
     if (!law) throw new Error(`Law ${id} not found`);
     return law;
   }
-  return get<TrafficLaw>(`/api/laws/${id}`);
+  const result = await get<{
+    section_id: string;
+    title: string;
+    content: string;
+    score: number;
+    metadata?: Record<string, unknown>;
+  }>(`/api/laws/${id}`);
+  return {
+    id: result.section_id,
+    section: result.section_id,
+    title: result.title,
+    jurisdiction: String(result.metadata?.jurisdiction ?? 'New York'),
+    excerpt: result.content,
+    fullText: result.content,
+    topics: [],
+    relevanceScore: result.score,
+  };
 }

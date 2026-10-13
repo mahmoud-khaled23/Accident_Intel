@@ -18,6 +18,7 @@ class AccidentResponse(BaseModel):
     description: str = ""
     notes: str = ""
     created_at: str = ""
+    video_filename: str = ""
     tracking_data: dict | None = None
     vlm_description: str | None = None
     laws: list[Any] | None = None

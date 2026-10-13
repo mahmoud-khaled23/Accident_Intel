@@ -70,4 +70,24 @@ class Config:
         c.overlap_threshold = float(os.getenv("OVERLAP_THRESHOLD", c.overlap_threshold))
         c.vlm_severity = os.getenv("VLM_SEVERITY", "0") == "1"
         c.vlm_quality_check = os.getenv("VLM_QUALITY_CHECK", "1") == "1"
+
+        from pathlib import Path
+        _base = Path(__file__).parent
+        for attr, candidates in [
+            ("damage_weights", [c.damage_weights, "src/Car_damage_cost/weights/damage_segmentation.pt", "weights/damage_segmentation.pt", "weights/damage_seg.pt"]),
+            ("parts_weights", [c.parts_weights, "src/Car_damage_cost/weights/parts_segmentation.pt", "weights/parts_segmentation.pt"]),
+            ("prices_path", [c.prices_path, "src/Car_damage_cost/data/prices.json", "data/prices.json"]),
+            ("price_cache_path", [c.price_cache_path, "src/Car_damage_cost/data/price_cache.json", "data/price_cache.json"]),
+        ]:
+            val = getattr(c, attr)
+            if not os.path.exists(val):
+                for cand in candidates:
+                    p1 = (_base / cand).resolve()
+                    p2 = Path(cand).resolve()
+                    if p1.exists():
+                        setattr(c, attr, str(p1))
+                        break
+                    elif p2.exists():
+                        setattr(c, attr, str(p2))
+                        break
         return c

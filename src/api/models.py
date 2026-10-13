@@ -203,3 +203,32 @@ def update_damage(db_path: str, assessment_id: str, updates: dict) -> dict | Non
         return get_damage(db_path, assessment_id)
     finally:
         conn.close()
+
+
+def list_damage(db_path: str) -> list[dict]:
+    conn = get_conn(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT id, status, data, created_at FROM damage_assessments ORDER BY created_at DESC"
+        ).fetchall()
+        result = []
+        for r in rows:
+            record = json.loads(r["data"])
+            record["id"] = r["id"]
+            record["status"] = r["status"]
+            record["created_at"] = r["created_at"]
+            result.append(record)
+        return result
+    finally:
+        conn.close()
+
+
+def delete_damage(db_path: str, assessment_id: str) -> bool:
+    conn = get_conn(db_path)
+    try:
+        cur = conn.execute("DELETE FROM damage_assessments WHERE id = ?", (assessment_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+

@@ -1,6 +1,8 @@
 from pathlib import Path
-
+import dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict as SettingsConfig
+
+dotenv.load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -12,6 +14,10 @@ class Settings(BaseSettings):
     reasoning_model: str = "gpt-4o-mini"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
+    vlm_api: str = "openai"
+    vlm_base_url: str = ""
+    vlm_model: str = ""
+    vlm_api_key: str = ""
     vlm_model_id: str = "Qwen/Qwen2-VL-7B-Instruct"
     vlm_n_frames: int = 32
     vlm_max_tokens: int = 700

@@ -93,17 +93,34 @@ def analyze_accident(
         "limitations (list of strings)"
     )
 
-    client = openai.OpenAI(api_key=settings.openai_api_key)
-    response = client.chat.completions.create(
-        model=settings.reasoning_model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.2,
-    )
+    import logging
+    import os
 
-    response_text = response.choices[0].message.content or ""
+    logger = logging.getLogger(__name__)
+
+    api_key = settings.openai_api_key or os.environ.get("OPENAI_API_KEY", "")
+    base_url = os.environ.get("OPENAI_BASE_URL", "").strip() or None
+    if not base_url and api_key.startswith("sk-or-v1-"):
+        base_url = "https://openrouter.ai/api/v1"
+
+    model = settings.reasoning_model
+    if base_url and "openrouter.ai" in base_url and not ("/" in model):
+        model = f"openai/{model}"
+
+    try:
+        client = openai.OpenAI(api_key=api_key or "no-key", base_url=base_url)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.2,
+        )
+        response_text = response.choices[0].message.content or ""
+    except Exception as exc:
+        logger.warning("OpenAI reasoning failed (%s) — falling back to mock report", exc)
+        return _MOCK_REPORT
 
     # Try to extract JSON from the response
     try:

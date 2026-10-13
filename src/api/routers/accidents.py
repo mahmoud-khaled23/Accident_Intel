@@ -33,6 +33,7 @@ def _row_to_response(record: dict) -> AccidentResponse:
         description=record.get("description", ""),
         notes=record.get("notes", ""),
         created_at=record.get("created_at", ""),
+        video_filename=record.get("video_filename", ""),
         tracking_data=record.get("tracking_data"),
         vlm_description=record.get("vlm_description"),
         laws=record.get("laws"),
@@ -46,16 +47,18 @@ def _row_to_response(record: dict) -> AccidentResponse:
 def list_accidents_endpoint(
     page: int = 1,
     limit: int = 20,
+    page_size: int | None = None,
     status: str | None = None,
     settings=Depends(get_settings),
 ):
-    items, total = list_accidents(str(settings.db_path), page=page, limit=limit, status=status)
+    effective_limit = page_size if page_size is not None else limit
+    items, total = list_accidents(str(settings.db_path), page=page, limit=effective_limit, status=status)
     return PaginatedResponse(
         items=[_row_to_response(r) for r in items],
         total=total,
         page=page,
-        limit=limit,
-        page_size=limit,
+        limit=effective_limit,
+        page_size=effective_limit,
     )
 
 
