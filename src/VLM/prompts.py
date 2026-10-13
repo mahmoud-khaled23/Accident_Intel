@@ -13,28 +13,34 @@ Task: write a detailed report of what happens in the clip and whether a traffic 
 Write the report in plain text with exactly these sections:
 
 1. SCENE OVERVIEW
-Describe the road layout (lanes, intersection, crossing, parked vehicles, sidewalks) and the road users visible at the start. Name each road user by what is clearly visible (for example "dark car", "white van", "motorcycle with rider", "pedestrian") and say where it is in the frame (left, right, near, far, which lane) and which way it is moving relative to the camera.
+Describe the road layout (lanes, intersection, crossing, parked vehicles, sidewalks) and the road users visible at the start. Name each road user by what is clearly visible (for example "dark car", "white van", "motorcycle with rider", "pedestrian") and include its Track ID in parentheses if telemetry is provided (for example "white van (Vehicle ID 2)").
 
 2. TIMELINE
-Write a separate detailed paragraph for each of START, MIDDLE, and END of the clip. In each paragraph, describe how every relevant road user moves, how positions change compared with the previous phase, and any change in direction, speed, or behavior that you can see. Say "unclear" when the frames do not show it.
+Write a separate detailed paragraph for each of START, MIDDLE, and END of the clip (including approximate timestamp brackets [start - end]). In each paragraph, describe how every relevant road user moves, how positions change compared with the previous phase, and any change in direction, speed, or behavior that you can see. Say "unclear" when the frames do not show it.
 
 3. ACCIDENT CHECKLIST
-Answer each line with YES, NO, or UNCLEAR, followed by a short evidence phrase that points to START, MIDDLE, or END (or "none"):
-- Contact between road users: <YES/NO/UNCLEAR> - <evidence>
-- Hit fixed object or left the road: <YES/NO/UNCLEAR> - <evidence>
-- Person or rider fell down: <YES/NO/UNCLEAR> - <evidence>
-- Abrupt swerve or hard stop: <YES/NO/UNCLEAR> - <evidence>
-- Vehicle left in abnormal position: <YES/NO/UNCLEAR> - <evidence>
+Answer each line with YES, NO, or UNCLEAR, followed by a short evidence phrase that points to START, MIDDLE, or END (or "none"), citing the vehicles involved:
+- Contact between road users: <YES/NO/UNCLEAR> - <evidence and vehicle IDs>
+- Hit fixed object or left the road: <YES/NO/UNCLEAR> - <evidence and vehicle IDs>
+- Person or rider fell down: <YES/NO/UNCLEAR> - <evidence and vehicle IDs>
+- Abrupt swerve or hard stop: <YES/NO/UNCLEAR> - <evidence and vehicle IDs>
+- Vehicle left in abnormal position: <YES/NO/UNCLEAR> - <evidence and vehicle IDs>
 
 Answer YES only when you can name specific visible evidence. Answer UNCLEAR when the evidence is weak, blurry, or hidden. Answer NO when the relevant road users are visible and nothing like it happens.
 
 4. FINAL STATE
 Describe what is visible in the last frames: where each road user is, whether anything is stopped or lying on the road, and whether traffic continues normally.
 
-5. CONCLUSION
+5. VERDICT SUMMARY
+- Incident Detected: <YES / NO / SUSPECTED>
+- Primary Classification: <Multi-Vehicle Collision / Single-Vehicle Crash / Near-Miss / Routine Traffic / Loss of Control>
+- Primary Vehicles Involved: <list Vehicle IDs with descriptions or "None">
+- Critical Incident Timestamp: <approximate second or "N/A">
+
+6. CONCLUSION
 Write 2 to 4 sentences stating whether an accident is clearly visible, possible, not visible, or cannot be determined, and cite the visible evidence that matches your checklist answers.
 
-6. UNCLEAR DETAILS
+7. UNCLEAR DETAILS
 List the important details you could not determine (for example hidden moments, distant objects, unreadable plates or signs).
 
 Keep the report to what the frames show. Leave out fault, causes, speed estimates, and driver intentions."""
@@ -211,24 +217,36 @@ when they are sufficiently visible to identify reliably.
 Never guess unreadable text or a traffic signal's state.
 
 OUTPUT
-Write a concise report in natural English using these sections:
+Write a structured, professional forensic report in natural English using exactly these sections:
 
 Scene Overview:
-Describe the environment and visible road users without unsupported detail.
+Describe the environment, road layout, and visible road users. If tracking telemetry is provided, identify each primary road user with its Track ID in parentheses (e.g. "the white van (Vehicle ID 2)", "the leading car (Vehicle ID 1)").
 
 Chronological Events:
-List the observable events in their actual order.
-Use "unclear" when an action or object's identity cannot be established.
+Reconstruct observable events in chronological order. Group observations into phases with approximate timestamp brackets grounded in the footage and telemetry, for example:
+- [0.00s - 0.83s]: Initial traffic flow, vehicle positioning, and approach speeds...
+- [0.83s - 1.80s]: Sudden speed change, emergency braking, interaction, or impact event...
+- [1.80s - End]: Immediate aftermath, post-impact trajectory, and secondary reactions...
 
 Incident Evidence:
-State what evidence supports or fails to establish a collision or other
-incident. Distinguish direct observations from uncertainty.
+Systematically evaluate:
+- Contact Between Road Users: State whether physical contact was clearly observed, suspected, or not observed. Cite the vehicles involved.
+- Fixed Object Impact / Road Departure: State whether contact with walls, guardrails, or obstacles occurred.
+- Abrupt Maneuvers / Decelerations: Describe any sudden braking or evasive swerves, citing the vehicles involved and matching telemetry speed drops.
+- Abnormal Final Orientation: Describe any rollover, vehicle resting on its roof/side, debris, or lane blockage.
 
 Final Observed State:
-Describe the visible state at the end of the footage.
+Describe the visible final positions of all relevant road users and whether traffic flow resumes or remains blocked.
 
 Uncertainties and Limitations:
-List important details that cannot be reliably determined.
+Explicitly list details that cannot be confirmed reliably from the camera footage.
+
+Verdict Summary:
+- Incident Detected: [YES / NO / SUSPECTED]
+- Primary Classification: [Multi-Vehicle Collision / Single-Vehicle Crash / Near-Miss / Routine Traffic / Loss of Control]
+- Primary Vehicles Involved: [List Vehicle IDs with visual descriptions, or "None"]
+- Critical Incident Timestamp: [e.g. ~0.83s or "N/A"]
+- Summary: 1-2 sentence forensic conclusion citing the key visible evidence.
 
 FINAL CONSTRAINT
 Accuracy is more important than completeness.

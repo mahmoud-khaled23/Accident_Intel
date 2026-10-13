@@ -243,11 +243,18 @@ def build_prompt(args, duration_s: float, tracking_summary: str | None = None) -
             "GROUND TRUTH TELEMETRY FROM YOLO DETECTOR & BoT-SORT TRACKER:\n"
             f"{tracking_summary}\n"
             "======================================================================\n"
-            "STRICT GROUNDING INSTRUCTIONS:\n"
-            "- Anchor your observations strictly to the detected road users and Track IDs listed above.\n"
-            "- Do NOT invent vehicles or road users not captured in the tracking telemetry.\n"
-            "- Pay special attention to the candidate timestamps, overlaps, and decelerations flagged above.\n"
-            "- Do NOT repeat identical observations or loop in a repetitive cycle.\n\n"
+            "MANDATORY FORENSIC GROUNDING INSTRUCTIONS:\n"
+            "1. VEHICLE ID BINDING (STRICT): Whenever referring to any road user anywhere in your report, you MUST "
+            "explicitly cite its Track ID in parentheses alongside its visual description (e.g. 'the white van (Vehicle ID 2)', "
+            "'the leading black car (Vehicle ID 1)', 'the blue truck (Vehicle ID 9)'). Never refer to a tracked vehicle without its Vehicle ID.\n"
+            "2. OBJECT PERMANENCE: The Track IDs above track the SAME physical entities over time. Do NOT invent phantom vehicles "
+            "or claim an overturned vehicle is a separate car from the one tracked in that lane.\n"
+            "3. TIMESTAMP ANCHORING: In 'Chronological Events', structure each event phase with timestamp brackets grounded "
+            "in the telemetry and clip duration (e.g. '[0.00s - 0.83s]: ...', '[0.83s - 1.80s]: ...').\n"
+            "4. KINEMATIC SYNCHRONIZATION: Cross-reference your deceleration and interaction descriptions with the measured speed drops "
+            "and collision alerts flagged in the telemetry above.\n"
+            "5. VERDICT SUMMARY: Complete the required Verdict Summary section at the end of the report, specifying the involved Vehicle IDs.\n"
+            "6. NO REPETITIVE LOOPS: State observations clearly and concisely without looping or repeating sentences.\n\n"
         )
         return telemetry_block + base_prompt
     return base_prompt
