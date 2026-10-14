@@ -1,9 +1,8 @@
-"""VLM video analysis service — wraps src/VLM/analyze_video.py or calls an
-OpenAI-compatible hosted VLM (e.g. Groq) when VLM_API=openai is configured."""
+"""VLM video analysis service — wraps src/VLM (local Qwen2-VL or hosted vision API)."""
+import json
 import sys
 from pathlib import Path
 
-# Ensure project root and src/ are on sys.path
 _project_root = str(Path(__file__).parents[3])
 _src_path = str(Path(__file__).parents[3] / "src")
 _vlm_path = str(Path(__file__).parents[3] / "src" / "VLM")
@@ -11,7 +10,6 @@ for _p in (_project_root, _src_path, _vlm_path):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Module-level model cache (populated lazily on first real local-model call)
 _vlm_model = None
 _vlm_processor = None
 
@@ -47,7 +45,6 @@ by the hatchback for several frames prior to impact.\
 
 
 def _analysis_prompt(tracking_data: dict | None) -> str:
-    import json
     from src.VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
     from .tracking_service import summarize_tracking
 
@@ -61,52 +58,22 @@ def _analysis_prompt(tracking_data: dict | None) -> str:
 
 
 def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | None = None) -> str:
-    import base64
-    import io
-    import math
-    from src.VLM.contact_sheet import sample_frames, make_sheet
-    import openai
-    from src.VLM.prompts import SYSTEM_PROMPT
+    from src.VLM.hosted import analyze_hosted
     from .video_service import inspect_video
 
-    model_id = settings.vlm_model
-    if not model_id:
-        raise RuntimeError("Set VLM_MODEL to a vision-capable model for VLM_API=openai.")
-    if not settings.vlm_api_key:
-        raise RuntimeError("Set VLM_API_KEY for the hosted visual model.")
     metadata = inspect_video(video_path)
     n_frames = min(settings.vlm_n_frames, metadata["frame_count"])
-    frames = sample_frames(video_path, n_frames)
-    if not frames:
-        raise RuntimeError("No frames could be extracted from this video.")
-    content = [{"type": "text", "text": _analysis_prompt(tracking_data) +
-               "\nImages may be contact sheets: read panels left-to-right, top-to-bottom. "
-               "Each panel is a different time, labelled in seconds; they are not simultaneous objects."}]
-    group_size = math.ceil(len(frames) / settings.vlm_max_images)
-    for offset in range(0, len(frames), group_size):
-        group = frames[offset:offset + group_size]
-        if len(group) == 1:
-            ts, picture = group[0]
-            picture.thumbnail((768, 768))
-            caption = f"Frame at {ts:.3f} seconds"
-        else:
-            picture = make_sheet(group, cols=math.ceil(math.sqrt(len(group))), thumb_w=384, thumb_h=216)
-            caption = "Video frames at " + ", ".join(f"{ts:.3f} seconds" for ts, _ in group)
-        buffer = io.BytesIO()
-        picture.save(buffer, format="JPEG", quality=85)
-        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-        content.append({"type": "text", "text": caption})
-        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}})
-
-    with openai.OpenAI(api_key=settings.vlm_api_key, base_url=settings.vlm_base_url or None,
-                       timeout=180.0, max_retries=1) as client:
-        response = client.chat.completions.create(
-            model=model_id,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}],
-            max_tokens=settings.vlm_max_tokens,
-            extra_body=settings.vlm_extra_params or None,
-        )
-    return response.choices[0].message.content or ""
+    return analyze_hosted(
+        video_path,
+        _analysis_prompt(tracking_data),
+        model=settings.vlm_model,
+        api_key=settings.vlm_api_key,
+        base_url=settings.vlm_base_url or None,
+        n_frames=n_frames,
+        max_images=settings.vlm_max_images,
+        max_tokens=settings.vlm_max_tokens,
+        extra_params=settings.vlm_extra_params or None,
+    )
 
 
 def analyze_video(video_path: str, accident_id: str, settings, tracking_data: dict | None = None) -> str:
@@ -117,8 +84,14 @@ def analyze_video(video_path: str, accident_id: str, settings, tracking_data: di
         return _analyze_via_openai_api(video_path, settings, tracking_data)
 
     global _vlm_model, _vlm_processor
-    from src.VLM.analyze_video import load_model, analyze
+    from src.VLM.analyze_video import analyze, load_model
     if _vlm_model is None:
         _vlm_model, _vlm_processor = load_model(settings.vlm_model_id)
-    return analyze(_vlm_model, _vlm_processor, video_path, _analysis_prompt(tracking_data),
-                   settings.vlm_n_frames, settings.vlm_max_tokens)
+    return analyze(
+        _vlm_model,
+        _vlm_processor,
+        video_path,
+        _analysis_prompt(tracking_data),
+        settings.vlm_n_frames,
+        settings.vlm_max_tokens,
+    )

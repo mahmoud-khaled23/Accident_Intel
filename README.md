@@ -69,28 +69,65 @@ vtl_db/                  # Local Chroma vector database
 
 - Python 3.13+ (as declared in `pyproject.toml`)
 - A CUDA-capable GPU is strongly recommended for local Qwen2-VL and YOLO inference.
-- API keys only for the optional hosted-model features:
-  - `GROQ_API_KEY` for traffic-law fact extraction and analysis
-  - `GEMINI_API_KEY` for optional replacement-part price lookup
+- API keys for a hosted VLM/reasoning provider, or sufficient GPU memory for local Qwen2-VL.
 
-Create an environment and install the project dependencies:
+Install the locked runtime dependencies with `uv`:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
+uv sync
 ```
 
-Some workflows have additional optional packages. Install only what the workflow requests—for example, the RAG liability-analysis script requires `openai`, `python-dotenv`, and `rank-bm25`.
+The first real run may also download model weights (YOLO, embeddings, a reranker, or Qwen2-VL).
 
-Create a local `.env` for secrets; never commit it:
+### Run the real upload-to-report application
+
+The React application is connected to the real API by default; mock data is only used when explicitly enabled. Configure the video-analysis pipeline first:
 
 ```dotenv
-GROQ_API_KEY=your_groq_key
-GEMINI_API_KEY=your_gemini_key
+TRACKING_MOCK=false
+VLM_MOCK=false
+RAG_MOCK=false
+REASONING_MOCK=false
+
+# Choose exactly one VLM option.
+# Local Qwen2-VL:
+VLM_API=local
+# Hosted OpenAI-compatible VLM:
+# VLM_API=openai
+# VLM_BASE_URL=https://your-provider.example/v1
+# VLM_MODEL=your-vision-capable-model
+# VLM_API_KEY=your_provider_key
+
+OPENAI_API_KEY=your_reasoning_key
+OPENAI_BASE_URL=https://your-provider.example/v1
+REASONING_MODEL=your_reasoning_model
+RAG_OUT_DIR=src/rag/chunking/out
 ```
 
-## Run the components
+Then start the API and React development server in separate terminals:
+
+```bash
+# Terminal 1 — FastAPI and the real model pipeline
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+```bash
+# Terminal 2 — React
+cd frontend
+npm install
+npm run dev
+```
+
+Keep `frontend/.env.local` in live mode:
+
+```dotenv
+VITE_USE_MOCK=false
+VITE_API_BASE_URL=
+```
+
+Open `http://localhost:5173`, select **New Video Analysis**, upload a valid MP4, MOV, or WebM file, and choose **Upload and analyze**. The saved analysis page updates through tracking, VLM analysis, traffic-law retrieval, and reasoning. If a model stage fails, the page shows its actual error and never substitutes demo results.
+
+## Run components directly
 
 ### 1. Analyze accident video with the VLM
 
@@ -125,11 +162,11 @@ The tracker uses YOLO11x vehicle classes (car, motorcycle, bus, and truck) with 
 
 ### 3. Search the traffic-law index
 
-The hybrid retrieval path combines dense embeddings (`BAAI/bge-m3`) with BM25 and Reciprocal Rank Fusion. A prepared index is stored under `out/`.
+The hybrid retrieval path combines dense embeddings (`BAAI/bge-m3`) with BM25 and Reciprocal Rank Fusion. The prepared law corpus and Chroma index are stored under `src/rag/chunking/out/`.
 
 ```bash
-python -m src.rag.retrieval.index_and_retrieve search \
-  --out out \
+uv run python -m src.rag.retrieval.index_and_retrieve search \
+  --out src/rag/chunking/out \
   -q "failure to yield right of way" \
   -q "traffic-control signal red indication" \
   --top-k 5
@@ -138,7 +175,7 @@ python -m src.rag.retrieval.index_and_retrieve search \
 To rebuild the Chroma index after changing chunks:
 
 ```bash
-python -m src.rag.retrieval.index_and_retrieve index --out out
+uv run python -m src.rag.retrieval.index_and_retrieve index --out src/rag/chunking/out
 ```
 
 ### 4. Produce a law-grounded accident analysis

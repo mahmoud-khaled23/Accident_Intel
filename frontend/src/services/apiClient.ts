@@ -37,7 +37,9 @@ client.interceptors.response.use(
       const detail: unknown = error.response?.data?.detail;
       const message = typeof detail === 'string' ? detail
         : Array.isArray(detail) ? detail.map((item) => item.msg ?? 'Invalid input').join('; ')
-        : error.message || 'An unknown API error occurred';
+        : !error.response
+          ? 'Cannot reach the Accident Intel API. Start the FastAPI server on port 8000, then refresh this page.'
+          : error.message || 'An unknown API error occurred';
       return Promise.reject(new Error(message));
     }
     return Promise.reject(error);

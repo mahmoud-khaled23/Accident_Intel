@@ -274,7 +274,7 @@ export function DashboardPage() {
         color: STATUS_COLORS[status],
       }),
     );
-  }, []);
+  }, [accidents]);
 
   // ── Activity timeline ──────────────────────────────────────────────────
   const activityEvents = useMemo(

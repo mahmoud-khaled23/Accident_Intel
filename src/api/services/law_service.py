@@ -60,6 +60,7 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
         return _MOCK_LAWS
 
     try:
+        from rag.chunking.query_expansion import expand_queries
         from rag.retrieval.report_retrieval import retrieve_for_report
     except ImportError as exc:
         raise RuntimeError(
@@ -67,9 +68,11 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
         ) from exc
 
     try:
+        extra_queries = expand_queries([description[:300]], method="rules")
         raw = retrieve_for_report(
             description=description,
             out=out_dir,
+            extra_queries=extra_queries,
             top_k=5,
             rerank=settings.rag_rerank,
             mode=settings.rag_mode,

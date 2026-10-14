@@ -1,17 +1,20 @@
-# sys.path surgery MUST happen before any domain imports so that all submodules
-# (vehicle_tracking, VLM, rag, Car_damage_cost) are importable as bare packages.
+# sys.path surgery MUST happen before any domain imports so that video-analysis
+# packages (vehicle_tracking, VLM, rag, reasoning) are importable as bare names.
 import re
 import sys
 from pathlib import Path
 
 _src_dir = str(Path(__file__).parents[2])             # Accident_Intel/
 _src_src_dir = str(Path(__file__).parents[2] / "src") # Accident_Intel/src/
-_car_damage_dir = str(Path(__file__).parents[2] / "src" / "Car_damage_cost")
 _vlm_dir = str(Path(__file__).parents[2] / "src" / "VLM")
 _rag_dir = str(Path(__file__).parents[2] / "src" / "rag")
-for _p in (_src_dir, _src_src_dir, _car_damage_dir, _vlm_dir, _rag_dir):
+_reasoning_dir = str(Path(__file__).parents[2] / "src" / "reasoning")
+_car_damage_dir = str(Path(__file__).parents[2] / "src" / "Car_damage_cost")
+for _p in (_src_dir, _src_src_dir, _vlm_dir, _rag_dir, _reasoning_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+if _car_damage_dir not in sys.path:
+    sys.path.append(_car_damage_dir)
 
 from contextlib import asynccontextmanager
 

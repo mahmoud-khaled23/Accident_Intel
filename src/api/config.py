@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     reasoning_mock: bool = False
     rag_mock: bool = False
     damage_mock: bool = False
-    rag_out_dir: Path = PROJECT_ROOT / "out"
+    # The checked-in law corpus and its Chroma index live together here.
+    # Runtime uploads and SQLite state live under `out/` and must not be used
+    # as a retrieval index unless an index has explicitly been built there.
+    rag_out_dir: Path = PROJECT_ROOT / "src/rag/chunking/out"
     rag_mode: Literal["hybrid", "dense", "bm25"] = "hybrid"
     rag_rerank: bool = True
     max_upload_mb: int = Field(default=500, ge=1)

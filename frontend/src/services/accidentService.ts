@@ -181,14 +181,31 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
 }
 
 function mapVLMDescription(text: string | null | undefined): VLMAnalysis {
+  const raw = text?.trim() ?? '';
+  const section = (name: string): string => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = raw.match(new RegExp(`(?:^|\\n)\\s*(?:#+\\s*)?${escaped}\\s*:?[\\s\\r\\n]*([\\s\\S]*?)(?=\\n\\s*(?:#+\\s*)?[A-Z][A-Za-z &/]+\\s*:|$)`, 'i'));
+    return match?.[1]?.trim() ?? '';
+  };
+
+  const scene = section('Scene Overview');
+  const events = section('Chronological Events') || section('Timeline');
+  const collision = section('Collision Evidence') || section('Collision Description');
+  const finalState = section('Final Observed State') || section('Final State');
+  const uncertainties = section('Uncertainties and Limitations') || section('Unclear Details');
+
+  // The VLM's source output is prose. This adapter exposes the original text
+  // in the existing UI without inventing structured claims or timestamps.
   return {
-    summary: text ?? '',
-    timeline: [],
+    summary: scene || raw,
+    timeline: events ? [{ type: 'fact', content: events }] : [],
     vehicleActions: {},
-    collisionDescription: '',
+    collisionDescription: collision || finalState,
     trafficSignals: '',
-    roadContext: '',
-    uncertainties: [],
+    roadContext: scene,
+    uncertainties: uncertainties
+      ? uncertainties.split(/\n|(?:^|\\s)[•-]\\s+/).map((item) => item.trim()).filter(Boolean)
+      : [],
   };
 }
 

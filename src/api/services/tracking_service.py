@@ -65,11 +65,18 @@ def run_tracking(
     output_video = str(out_dir / f"{accident_id}_tracked.mp4")
     output_json = str(out_dir / f"{accident_id}_trajectories.json")
 
+    from vehicle_tracking.accident_candidates import identify_accident_candidates
+
     from .video_service import inspect_video
     metadata = inspect_video(video_path)
     raw = process_video(video_path, output_video, output_json, model_path=model_path)
 
-    # Normalise the raw trajectories dict returned by process_video
+    for info in raw.values():
+        for fdata in info.get("trajectory", {}).values():
+            box = fdata.get("box", [])
+            if "center" not in fdata and len(box) == 4:
+                fdata["center"] = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2]
+
     trajectories = []
     for track_id, info in raw.items():
         frames = []
@@ -86,6 +93,7 @@ def run_tracking(
         "vehicle_count": len(trajectories),
         **metadata,
         "trajectories": trajectories,
+        "accident_candidates": identify_accident_candidates(raw),
     }
 
 
@@ -99,8 +107,19 @@ def summarize_tracking(data: dict) -> dict:
                          "first_seen": frames[0].get("timestamp") if frames else None,
                          "last_seen": frames[-1].get("timestamp") if frames else None,
                          "sampled_positions": sample})
+    candidates = data.get("accident_candidates") or []
     return {"vehicle_count": data.get("vehicle_count", 0),
             "duration_seconds": data.get("duration_seconds"),
             "width": data.get("width"), "height": data.get("height"),
             "vehicles": vehicles,
-            "limitations": "Boxes are image pixels, not calibrated speeds. Track IDs may switch or fragment."}
+            "accident_candidates": [
+                {
+                    "vehicle_ids": item.get("vehicle_ids"),
+                    "suspicion_score": item.get("suspicion_score"),
+                    "evidence": item.get("evidence"),
+                    "overlap_frame": item.get("overlap_frame"),
+                }
+                for item in candidates[:20]
+            ],
+            "limitations": "Boxes are image pixels, not calibrated speeds. Track IDs may switch or fragment. "
+                           "Candidate overlaps are pixel-space heuristics, not confirmed collisions."}

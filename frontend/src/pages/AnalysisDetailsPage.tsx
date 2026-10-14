@@ -81,7 +81,8 @@ export function AnalysisDetailsPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!id || !record || ['created', 'uploaded', 'completed', 'failed'].includes(record.status)) return;
+    const currentStatus = record?.status;
+    if (!id || !currentStatus || ['created', 'uploaded', 'completed', 'failed'].includes(currentStatus)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -89,7 +90,7 @@ export function AnalysisDetailsPage() {
         const next = await pollStatus(id!);
         if (cancelled) return;
         setConnectionError(null);
-        if (next.status !== record!.status) await loadData(true);
+        if (next.status !== currentStatus) await loadData(true);
       } catch (err) {
         if (!cancelled) setConnectionError(err instanceof Error ? err.message : 'Connection lost. Reconnecting…');
       }
