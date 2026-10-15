@@ -13,6 +13,7 @@ Key functions:
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit, urlunsplit
 
 SYSTEM_PROMPT = (
     "You are an evidence-focused traffic accident analysis assistant. "
@@ -94,6 +95,21 @@ def _parse_json(response_text: str) -> dict:
     return json.loads(text)
 
 
+def _resolve_provider(api_key: str, base_url: str, model: str) -> tuple[str | None, str]:
+    """Accept an API base or pasted chat endpoint without duplicating its path."""
+    resolved_base = (base_url or "").strip() or None
+    resolved_model = model.strip()
+    if not resolved_base and api_key.startswith("sk-or-v1-"):
+        resolved_base = "https://openrouter.ai/api/v1"
+    if resolved_base:
+        parsed = urlsplit(resolved_base)
+        path = parsed.path.rstrip("/").removesuffix("/chat/completions")
+        resolved_base = urlunsplit(parsed._replace(path=path))
+        if parsed.hostname == "openrouter.ai" and "/" not in resolved_model:
+            resolved_model = f"openai/{resolved_model}"
+    return resolved_base, resolved_model
+
+
 def analyze_accident(
     description: str,
     tracking_summary: dict,
@@ -149,12 +165,7 @@ def analyze_accident(
     """
     import openai
 
-    resolved_base = (base_url or "").strip() or None
-    resolved_model = model
-    if not resolved_base and api_key.startswith("sk-or-v1-"):
-        resolved_base = "https://openrouter.ai/api/v1"
-    if resolved_base and "openrouter.ai" in resolved_base and "/" not in resolved_model:
-        resolved_model = f"openai/{resolved_model}"
+    resolved_base, resolved_model = _resolve_provider(api_key, base_url, model)
     if not api_key:
         raise RuntimeError("Set OPENAI_API_KEY for the reasoning model.")
 
@@ -178,6 +189,12 @@ def analyze_accident(
         raise RuntimeError(
             "Reasoning API authentication failed. Verify OPENAI_API_KEY and OPENAI_BASE_URL "
             "in the server .env, then restart the API and retry."
+        ) from exc
+    except openai.NotFoundError as exc:
+        raise RuntimeError(
+            "Reasoning API returned 404. Verify OPENAI_BASE_URL is the provider's API base "
+            "(for OpenRouter: https://openrouter.ai/api/v1) and REASONING_MODEL is available "
+            "for that provider, then restart the API and retry."
         ) from exc
     except Exception as exc:
         raise RuntimeError(f"Reasoning model request failed: {exc}") from exc

@@ -35,6 +35,9 @@ substitute sample accident results. The existing project `.env` is read from the
   Hybrid dense/BM25 retrieval with reranking is the default; an empty dense index is built on first use.
   `RAG_MODE=bm25` and `RAG_RERANK=false` explicitly select a lighter configuration without embedding downloads.
 - Reasoning: `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and `REASONING_MODEL` (default `gpt-4o-mini`).
+  Set the API base, not the full chat endpoint: for OpenRouter use `https://openrouter.ai/api/v1`,
+  without `/chat/completions`. The SDK adds that path. Accident Intel also normalizes a pasted
+  chat endpoint to avoid duplicate paths and reports endpoint/model configuration errors on 404.
   Existing OpenRouter keys automatically use its endpoint. The visual description, bounded tracking
   summary, retrieved passages, and unverified user context are passed to the reasoning model.
 

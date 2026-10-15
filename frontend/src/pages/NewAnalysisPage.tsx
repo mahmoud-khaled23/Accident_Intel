@@ -10,11 +10,11 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { VideoUploader } from '@/components/upload/VideoUploader';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { uploadVideo, triggerAnalysis } from '@/services/accidentService';
-import { isMockMode } from '@/services/apiClient';
+import { get, isMockMode } from '@/services/apiClient';
 import { usePipelineHealth } from '@/hooks/usePipelineHealth';
 import { VideoBackendSelect } from '@/components/analysis/VideoBackendSelect';
 import { getSettings } from '@/services/settingsService';
-import type { VideoBackend } from '@/types/pipeline';
+import type { PipelineHealth, VideoBackend } from '@/types/pipeline';
 
 export function NewAnalysisPage() {
   const navigate = useNavigate();
@@ -31,11 +31,20 @@ export function NewAnalysisPage() {
     if (!file || busy) return;
     setError(null);
     // Demo mode is explicit and never pretends to analyze an uploaded file.
-    if (isMockMode || (health && Object.values(health.pipeline).includes('demo'))) {
-      setError('Demo mode is enabled. Disable VITE_USE_MOCK and all server pipeline mock flags to analyze your video.');
+    if (isMockMode) {
+      setError('Frontend demo mode is enabled. Set VITE_USE_MOCK=false in frontend/.env.local and restart the React server.');
       return;
     }
     try {
+      setPhase('starting');
+      // Recheck live configuration so a restarted backend is not blocked by cached health.
+      const currentHealth = await get<PipelineHealth>('/api/health');
+      const mockFlags = Object.entries(currentHealth.pipeline)
+        .filter(([, mode]) => mode === 'demo')
+        .map(([stage]) => `${stage.toUpperCase()}_MOCK`);
+      if (mockFlags.length > 0) {
+        throw new Error(`Backend demo mode is enabled: ${mockFlags.join(', ')}. Set these flags to false in the project .env, restart the FastAPI server, then retry.`);
+      }
       let id = savedId;
       if (!id) {
         setPhase('uploading');
