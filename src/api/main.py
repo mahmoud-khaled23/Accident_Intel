@@ -9,7 +9,7 @@ _src_src_dir = str(Path(__file__).parents[2] / "src") # Accident_Intel/src/
 _vlm_dir = str(Path(__file__).parents[2] / "src" / "VLM")
 _rag_dir = str(Path(__file__).parents[2] / "src" / "rag")
 _reasoning_dir = str(Path(__file__).parents[2] / "src" / "reasoning")
-_car_damage_dir = str(Path(__file__).parents[2] / "src" / "Car_damage_cost")
+_car_damage_dir = str(Path(__file__).parents[2] / "src" / "car_damage_cost")
 for _p in (_src_dir, _src_src_dir, _vlm_dir, _rag_dir, _reasoning_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)

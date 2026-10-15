@@ -182,6 +182,7 @@ def get_collection(out):
     Returns:
         chromadb.Collection: The existing or newly created collection.
     """
+    client = chromadb.PersistentClient(path=str(Path(out) / "chroma"))
     return client.get_or_create_collection("traffic_laws", metadata={"hnsw:space": "cosine"})
 
 

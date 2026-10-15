@@ -71,7 +71,7 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
         extra_queries = expand_queries([description[:300]], method="rules")
         raw = retrieve_for_report(
             description=description,
-            out=out_dir,
+            out=Path(out_dir),   # ensure Path, not string
             extra_queries=extra_queries,
             top_k=5,
             rerank=settings.rag_rerank,
