@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Print Python / library / GPU environment information."""
+"""Print Python / library / GPU environment information.
+
+Useful for diagnosing dependency or hardware issues before running the
+Accident Intel pipeline.  Checks every library listed in :data:`LIBS` and
+reports whether CUDA is available.
+
+Key function: :func:`main`.
+"""
 import importlib.metadata as md
 import platform
 import sys
@@ -14,6 +21,17 @@ LIBS = [
 
 
 def main():
+    """Print installed versions of key libraries and GPU availability.
+
+    Iterates over :data:`LIBS`, querying ``importlib.metadata`` for each
+    installed package version.  Packages that are not installed are reported
+    as "not installed" rather than raising an exception.  After the library
+    table, prints CUDA availability and the GPU device name when a GPU is
+    present.
+
+    Returns:
+        None
+    """
     print("Python:", sys.version)
     print("Platform:", platform.platform())
     print()

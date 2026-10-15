@@ -25,6 +25,23 @@ MAX_PIXELS = 1024 * 28 * 28
 
 
 def parse_args():
+    """Parse and validate command-line arguments for the VLM analyzer.
+
+    Builds an :class:`argparse.ArgumentParser` with options for the input
+    video, prompt selection, sampling parameters, model choice, and output
+    file.  Exits with an error message if ``--n-frames`` or
+    ``--max-new-tokens`` are less than 1.
+
+    Returns:
+        argparse.Namespace: Parsed arguments with attributes:
+            - ``video`` (str): Path to the input video.
+            - ``prompt_mode`` (str): ``"json"`` or ``"report"``.
+            - ``prompt_file`` (str | None): Path to a custom prompt file.
+            - ``n_frames`` (int): Number of frames to sample.
+            - ``max_new_tokens`` (int): Generation budget.
+            - ``model_id`` (str): HuggingFace model identifier.
+            - ``output`` (str | None): Optional path to save the report.
+    """
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--video", required=True, help="Path to the input video")
     p.add_argument("--prompt-mode", choices=["json", "report"], default="report",
@@ -44,6 +61,24 @@ def parse_args():
 
 
 def load_model(model_id: str):
+    """Download (if necessary) and load the Qwen2-VL model and its processor.
+
+    Loads ``Qwen2VLForConditionalGeneration`` in half-precision (``float16``)
+    when a CUDA device is available, otherwise in ``float32``.  ``device_map``
+    is set to ``"auto"`` so multi-GPU and CPU-offload are handled automatically
+    by the ``accelerate`` library.
+
+    Args:
+        model_id: HuggingFace model repository identifier, e.g.
+            ``"Qwen/Qwen2-VL-7B-Instruct"``.
+
+    Returns:
+        tuple[Qwen2VLForConditionalGeneration, AutoProcessor]: The loaded model
+        and its matching processor, ready for inference.
+
+    Example:
+        >>> model, processor = load_model("Qwen/Qwen2-VL-7B-Instruct")
+    """
     processor = AutoProcessor.from_pretrained(
         model_id, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS
     )
@@ -56,6 +91,25 @@ def load_model(model_id: str):
 
 
 def get_video_duration(video_path: str) -> float:
+    """Return the total duration of a video in seconds.
+
+    Opens the video with OpenCV, reads its FPS and total frame count, then
+    computes ``total_frames / fps``.
+
+    Args:
+        video_path: Path to the video file.
+
+    Returns:
+        float: Duration in seconds.
+
+    Raises:
+        ValueError: If the video cannot be opened or its metadata (FPS or
+            frame count) is invalid (≤ 0).
+
+    Example:
+        >>> get_video_duration("clip.mp4")
+        12.5
+    """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -66,6 +120,23 @@ def get_video_duration(video_path: str) -> float:
 
 
 def build_prompt(args, duration_s: float) -> str:
+    """Select or construct the user-turn prompt for the VLM.
+
+    Priority order:
+    1. If ``args.prompt_file`` is set, read and return the file's text verbatim.
+    2. If ``args.prompt_mode`` is ``"json"``, return a structured accident-report
+       prompt rendered for the actual frame count and duration via
+       :func:`~prompts.build_accident_prompt`.
+    3. Otherwise return :data:`~prompts.TRAFFIC_ANALYSIS_PROMPT`.
+
+    Args:
+        args: Parsed CLI arguments (as returned by :func:`parse_args`).
+        duration_s: Video duration in seconds, used when building the
+            structured prompt.
+
+    Returns:
+        str: The prompt string to send as the user turn.
+    """
     if args.prompt_file:
         return Path(args.prompt_file).read_text(encoding="utf-8")
     if args.prompt_mode == "json":
@@ -74,6 +145,33 @@ def build_prompt(args, duration_s: float) -> str:
 
 
 def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_new_tokens: int) -> str:
+    """Run the Qwen2-VL model on a video and return the generated text report.
+
+    Clamps ``n_frames`` to the actual frame count and rounds it down to an
+    even number (required by Qwen's video sampler).  Builds a two-turn
+    message list with the system prompt, the video, and the user prompt; then
+    runs greedy decoding with ``do_sample=False``.
+
+    Args:
+        model: A loaded ``Qwen2VLForConditionalGeneration`` instance.
+        processor: The matching ``AutoProcessor`` instance.
+        video_path: Path to the input video file.
+        prompt: The user-turn prompt text (from :func:`build_prompt`).
+        n_frames: Requested number of frames to sample; automatically clamped
+            to the valid range ``[2, frame_count]`` and rounded to even.
+        max_new_tokens: Maximum number of tokens the model may generate.
+
+    Returns:
+        str: The decoded text of the model's response with special tokens
+        stripped.
+
+    Raises:
+        ValueError: If the video has fewer than two frames, which is the
+            minimum required by Qwen's video encoder.
+
+    Example:
+        >>> report = analyze(model, processor, "clip.mp4", prompt, 32, 700)
+    """
     # Qwen video sampling requires an even count that fits in the source clip.
     cap = cv2.VideoCapture(video_path)
     try:
@@ -117,6 +215,15 @@ def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_n
 
 
 def main():
+    """Entry point for the VLM video analyzer CLI.
+
+    Parses arguments, measures the video duration, selects the appropriate
+    prompt, loads the model, runs inference, prints the report, and
+    optionally saves it to a file.
+
+    Returns:
+        None
+    """
     args = parse_args()
     duration_s = get_video_duration(args.video)
     prompt = build_prompt(args, duration_s)

@@ -1,16 +1,20 @@
-"""
-report_retrieval.py
--------------------
-Find the relevant law sections for a LONG accident report (for example a video description),
-WITHOUT needing an LLM for the retrieval step.
+"""Behavior-aware law retrieval for long accident reports.
 
-Why: putting a whole report into one search query does not work well - the embedding gets
-diluted by scene details (night, tram tracks, headlights ...) and every section scores about the same.
-Instead this script:
-  1. detects the driving behaviors in the report with keyword rules (editable below),
-  2. turns each behavior into short queries written in the style of the law,
-  3. puts the sections that govern those behaviors FIRST ("anchors"),
-  4. lets vector search fill the remaining slots (also using any extra queries you pass in).
+Finds the most relevant traffic-law sections for a free-text or JSON accident
+report without requiring an LLM for the retrieval step.
+
+The strategy has three phases:
+
+1. **Keyword detection** — :data:`RULES` maps named driving behaviors (e.g.
+   ``"left turn"``, ``"speed"``) to regexes matched against the report text.
+   When a behavior is detected its anchor section numbers are fetched directly.
+2. **Query construction** — each matching rule contributes short, law-style
+   queries that are fed to the dense/BM25 vector search.
+3. **Slot filling** — anchors from keyword rules fill the first
+   ``max_anchor_share * top_k`` slots; vector search fills the remainder.
+
+Key entry point: :func:`retrieve_for_report`.
+Can also be run as a script (see module docstring below).
 
 Usage:
     python report_retrieval.py --out ./out --file report.txt --top-k 8
@@ -111,15 +115,47 @@ def _flatten(obj, key=""):
 
 
 def json_to_text(obj):
-    """Flatten any JSON (dict / list / nested) into plain 'key: value' lines."""
+    """Flatten any JSON (dict / list / nested) into plain 'key: value' lines.
+
+    Recursively walks ``obj``, building lines of the form ``"key: value"``
+    for each leaf string/number.  Keys listed in :data:`SKIP_KEYS` (``"queries"``
+    and ``"relevant_sections"``) are omitted so that LLM instruction artifacts
+    do not pollute the accident description text.
+
+    Args:
+        obj: Any JSON-compatible value — a ``dict``, ``list``, scalar, or
+            ``None``.
+
+    Returns:
+        str: Newline-joined flat representation of all non-skipped leaf values.
+
+    Example:
+        >>> json_to_text({"impact": "front to rear", "vehicles": [{"id": "A"}]})
+        'impact: front to rear\\nvehicles: id: A'
+    """
     return "\n".join(_flatten(obj))
 
 
 def load_report(raw):
-    """
-    Accepts plain text OR a JSON document (a dict like {"vehicles": [...], "impact": "..."},
-    or a list of per-frame descriptions). Returns (text, extra_queries, extra_sections).
-    If the JSON has a "queries" or "relevant_sections" list, those are used as extra search input.
+    """Parse a raw report string that may be plain text or a JSON document.
+
+    Accepts plain text OR a JSON document (a dict like ``{"vehicles": [...],
+    "impact": "..."}``, or a list of per-frame descriptions).  Returns the
+    text form of the description, plus any extra search queries and section
+    numbers extracted from the JSON.
+
+    If the JSON has a ``"queries"`` or ``"relevant_sections"`` list those are
+    returned as ``extra_queries`` / ``extra_sections`` to seed the retrieval
+    step with additional signals without polluting the description text.
+
+    Args:
+        raw: A string that is either plain text or a JSON-encoded dict/list.
+
+    Returns:
+        tuple[str, list[str], list[str]]: A 3-tuple of:
+            - ``description`` — the flat text form of the report.
+            - ``extra_queries`` — search queries from the JSON (may be empty).
+            - ``extra_sections`` — section numbers from the JSON (may be empty).
     """
     try:
         obj = json.loads(raw)
@@ -133,19 +169,67 @@ def load_report(raw):
 
 
 def detect(description):
-    """Return [(rule name, queries, anchors)] for every rule whose regex matches the report."""
+    """Return rules whose regex pattern matches the accident report text.
+
+    Iterates over :data:`RULES` and tests each rule's compiled regex against
+    ``description`` (case-insensitive).
+
+    Args:
+        description: The accident report text (plain English or flattened JSON).
+
+    Returns:
+        list[tuple[str, list[str], list[str]]]: Each element is
+        ``(rule_name, query_list, anchor_section_numbers)`` for every rule
+        whose regex matched.
+
+    Example:
+        >>> fired = detect("The car ran a red light at the intersection.")
+        >>> [name for name, _, _ in fired]
+        ['traffic signal', 'right of way at intersection']
+    """
     return [(name, qs, anchors) for name, rx, qs, anchors in RULES
             if re.search(rx, description, re.I)]
 
 
 def retrieve_for_report(description, out, extra_queries=None, extra_sections=None, top_k=8,
                         rerank=False, max_anchor_share=0.8, return_details=False, mode="hybrid"):
-    """
-    Returns at most top_k full law sections:
-      - anchors from the keyword rules first (at most max_anchor_share * top_k of them),
-      - the rest filled by vector search over the rule queries + extra_queries.
-    Returns the list of sections (same dict format as retrieve()).
-    With return_details=True it returns (sections, rule_names_that_fired, all_queries).
+    """Retrieve the most relevant traffic-law sections for an accident report.
+
+    Combines keyword-rule anchors with vector search to return at most
+    ``top_k`` law sections.  Anchor sections (determined by the fired
+    :data:`RULES`) are placed first (capped at ``max_anchor_share * top_k``),
+    and the remaining slots are filled by vector/BM25 search.
+
+    Args:
+        description: Accident report text (plain or flattened JSON).
+        out: Path to the directory that holds ``parents.json``,
+            ``children.jsonl``, and the Chroma database.
+        extra_queries: Additional search query strings to merge with the
+            rule-generated queries.  Defaults to ``None``.
+        extra_sections: Additional section numbers (without the ``"VTL-"``
+            prefix) to promote as anchors.  Defaults to ``None``.
+        top_k: Maximum number of law sections to return.  Defaults to ``8``.
+        rerank: If ``True``, re-score candidates with the BGE cross-encoder
+            before returning.  Slower but more precise.  Defaults to ``False``.
+        max_anchor_share: Maximum fraction of ``top_k`` slots that keyword-rule
+            anchors may occupy.  Defaults to ``0.8``.
+        return_details: If ``True``, return a 3-tuple instead of just the
+            sections list.  Defaults to ``False``.
+        mode: Retrieval strategy — ``"dense"``, ``"bm25"``, or ``"hybrid"``
+            (default).
+
+    Returns:
+        list[dict] | tuple[list[dict], list[str], list[str]]:
+            - When ``return_details=False`` (default): a list of up to
+              ``top_k`` law-section dicts in the same format as
+              :func:`~index_and_retrieve.retrieve`.
+            - When ``return_details=True``: a 3-tuple of
+              ``(sections, rule_names_that_fired, all_queries_used)``.
+
+    Example:
+        >>> laws = retrieve_for_report("Car A ran a red light.", "./out", top_k=5)
+        >>> laws[0]["id"]
+        'VTL-1111'
     """
     parents, _ = load(out)
     fired = detect(description)

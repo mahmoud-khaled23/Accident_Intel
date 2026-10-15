@@ -1,4 +1,15 @@
-"""Evidence-grounded liability reasoning from a visual description, tracking, and retrieved law."""
+"""Evidence-grounded liability reasoning from a visual description, tracking, and retrieved law.
+
+Calls an OpenAI-compatible chat API (e.g. OpenRouter, Azure OpenAI, or vanilla
+OpenAI) to produce a structured JSON liability assessment that cites only the
+law sections supplied to it.
+
+Key constants:
+    :data:`SYSTEM_PROMPT` — system-role instructions for the reasoning model.
+
+Key functions:
+    :func:`analyze_accident` — the main entry point used by the API server.
+"""
 from __future__ import annotations
 
 import json
@@ -20,6 +31,26 @@ def _user_message(
     laws: list[dict],
     user_context: dict | None,
 ) -> str:
+    """Compose the user-turn message for the reasoning model.
+
+    Formats the accident description, vehicle tracking summary (as JSON),
+    and retrieved law sections into a single string.  Appends the task
+    specification that instructs the model to reply with a structured JSON
+    object.
+
+    Args:
+        description: Free-text accident description, typically the VLM report.
+        tracking_summary: Dict summarising the tracking output (vehicle IDs,
+            classes, scores, etc.) to give the model numerical context.
+        laws: List of retrieved law section dicts, each expected to have at
+            least ``"section_id"`` / ``"id"``, ``"title"``, and
+            ``"content"`` / ``"text"`` keys.
+        user_context: Optional dict of unverified supplemental information
+            provided by the user (e.g. weather, time of day).
+
+    Returns:
+        str: The fully formatted user-turn message string.
+    """
     laws_text = "\n\n".join(
         f"Section {law.get('section_id', law.get('id', ''))}: "
         f"{law.get('title', '')}\n{law.get('content', law.get('text', ''))}"
@@ -39,6 +70,23 @@ def _user_message(
 
 
 def _parse_json(response_text: str) -> dict:
+    """Extract and parse a JSON object from a model response string.
+
+    Handles responses that wrap the JSON in a Markdown code fence
+    (`` ```json ... ``` `` or `` ``` ... ``` ``).  Strips the fence before
+    parsing.
+
+    Args:
+        response_text: Raw text from the model, potentially wrapped in
+            a Markdown code fence.
+
+    Returns:
+        dict: The parsed JSON object.
+
+    Raises:
+        json.JSONDecodeError: If the text (after stripping any fence) is
+            not valid JSON.
+    """
     text = response_text.strip()
     if text.startswith("```"):
         text = "\n".join(text.split("\n")[1:])
@@ -56,7 +104,49 @@ def analyze_accident(
     base_url: str = "",
     model: str = "gpt-4o-mini",
 ) -> dict:
-    """Call an OpenAI-compatible chat model and return parsed JSON (not yet schema-validated)."""
+    """Call an OpenAI-compatible chat model and return a parsed JSON liability assessment.
+
+    Constructs the system and user messages via :data:`SYSTEM_PROMPT` and
+    :func:`_user_message`, sends a single chat completion request with
+    ``response_format={"type": "json_object"}`` to force valid JSON output,
+    and parses the response with :func:`_parse_json`.
+
+    Automatically routes to OpenRouter (``https://openrouter.ai/api/v1``) when
+    ``api_key`` starts with ``"sk-or-v1-"`` and no explicit ``base_url`` is
+    given.  On OpenRouter the model name is prefixed with ``"openai/"`` if it
+    does not already contain a ``/``.
+
+    Args:
+        description: Free-text accident description (e.g. the VLM's report).
+        tracking_summary: Dict summarising tracked vehicle data.
+        laws: List of retrieved law section dicts from the RAG pipeline.
+        user_context: Optional unverified context dict supplied by the user.
+            Defaults to ``None``.
+        api_key: API key for the target service.
+        base_url: Base URL of the API endpoint.  If empty and the key looks
+            like an OpenRouter key, the OpenRouter endpoint is used.
+        model: Chat model identifier.  Defaults to ``"gpt-4o-mini"``.
+
+    Returns:
+        dict: Parsed JSON response from the reasoning model.  The exact schema
+        is determined by the model, but typically contains keys such as
+        ``"overall_assessment"``, ``"vehicles"``, ``"overall_level"``,
+        ``"violations"``, ``"confidence"``, and ``"limitations"``.
+
+    Raises:
+        RuntimeError: If ``api_key`` is empty, the API call fails, or the
+            model response cannot be parsed as a JSON object.
+
+    Example:
+        >>> result = analyze_accident(
+        ...     description="Car A ran a red light...",
+        ...     tracking_summary={},
+        ...     laws=[],
+        ...     api_key="sk-...",
+        ... )
+        >>> result["overall_level"]
+        'potential_responsibility'
+    """
     import openai
 
     resolved_base = (base_url or "").strip() or None

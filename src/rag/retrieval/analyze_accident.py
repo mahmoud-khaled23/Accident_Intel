@@ -1,9 +1,20 @@
-"""
-analyze_accident.py
--------------------
-Accident description  ->  structured facts + search queries (LLM call 1)
-                      ->  relevant law sections (RAG retrieval)
-                      ->  fault analysis based ONLY on those sections (LLM call 2)
+"""Three-step accident analysis pipeline: fact extraction, RAG retrieval, fault analysis.
+
+Orchestrates a three-stage LLM + RAG workflow:
+
+1. **Fact extraction** (LLM call 1) — a structured-output model parses the
+   free-text accident description into a JSON facts object, deriving search
+   queries and relevant section numbers.
+2. **Law retrieval** (RAG) — the queries and section picks drive
+   :func:`~rag.retrieval.index_and_retrieve.retrieve` to find the most
+   applicable traffic-law sections from the local vector store.
+3. **Fault analysis** (LLM call 2) — the facts and retrieved laws are sent to
+   a second model call that produces a structured fault assessment.
+
+By default uses the Groq API with ``openai/gpt-oss-120b``.  Set
+``GROQ_API_KEY`` in the environment (or ``.env`` file) before running.
+
+Key functions: :func:`build_catalog`, :func:`_call_groq`, :func:`main`.
 
 Setup:
     pip install openai
@@ -99,7 +110,26 @@ Write the answer in {language} using exactly these sections:
 
 
 def build_catalog(parents):
-    """'number | title' for every searchable section, so the LLM can pick sections by title."""
+    """Build a compact section catalog string for LLM title-routing.
+
+    Produces a newline-separated list of ``"<number> | <title>"`` lines for
+    every ``"core"`` section in ``parents``.  This catalog is prepended to
+    the accident description in the fact-extraction prompt so the LLM can
+    pick section numbers directly from titles rather than guessing them.
+
+    Args:
+        parents: Dict mapping section IDs to their parent records, as returned
+            by :func:`~rag.retrieval.index_and_retrieve.load`.  Only records
+            with ``"category" == "core"`` are included.
+
+    Returns:
+        str: Newline-joined catalog string, sorted by section number.
+
+    Example:
+        >>> catalog = build_catalog(parents)
+        >>> catalog.splitlines()[0]
+        '1110 | Traffic-Control Signals Generally'
+    """
     def key(sec):
         m = re.match(r"\d+", sec)
         return (int(m.group()) if m else 0, sec)
@@ -110,7 +140,31 @@ def build_catalog(parents):
 
 def _call_groq(system: str, user: str, model: str, api_key: str,
                max_tokens: int = 2000, retries: int = 5) -> str:
-    """Call Groq API (OpenAI-compatible). Retries on 503/429 errors."""
+    """Call the Groq API (OpenAI-compatible) with exponential-backoff retries.
+
+    Sends a two-message chat completion request (system + user) and returns
+    the model's response text.  On ``503 InternalServerError`` or
+    ``429 RateLimitError`` the function waits ``2^attempt`` seconds and
+    retries up to ``retries`` times before raising.
+
+    Args:
+        system: The system-role message content.
+        user: The user-role message content.
+        model: Groq model identifier (e.g. ``"openai/gpt-oss-120b"``).
+        api_key: Groq API key.
+        max_tokens: Maximum tokens to generate.  Defaults to ``2000``.
+        retries: Maximum number of retry attempts on transient errors.
+            Defaults to ``5``.
+
+    Returns:
+        str: The model's response text with leading/trailing whitespace stripped.
+
+    Raises:
+        RuntimeError: If all retry attempts are exhausted.
+
+    Example:
+        >>> text = _call_groq(EXTRACT_SYSTEM, "Car A ran a red light.", model, api_key)
+    """
     from openai import OpenAI, InternalServerError, RateLimitError
 
     client = OpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
@@ -138,6 +192,23 @@ def _call_groq(system: str, user: str, model: str, api_key: str,
     raise RuntimeError(f"Groq failed after {retries} retries")
 
 def parse_json(text):
+    """Extract and parse a JSON object from a raw LLM response string.
+
+    Strips Markdown code fences (`` ```json `` / `` ``` ``) if present, then
+    locates the first ``{`` and last ``}`` to isolate the JSON object before
+    parsing.
+
+    Args:
+        text: Raw string returned by the LLM, optionally wrapped in a Markdown
+            code fence.
+
+    Returns:
+        dict: The parsed JSON object.
+
+    Raises:
+        ValueError: If no ``{...}`` pair is found in the cleaned text.
+        json.JSONDecodeError: If the extracted substring is not valid JSON.
+    """
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
@@ -146,6 +217,21 @@ def parse_json(text):
 
 
 def format_laws(laws):
+    """Format a list of retrieved law sections into a readable text block.
+
+    Each section is rendered as a Markdown ``## <id> | matched by: <queries>``
+    header followed by the section body.  Bodies longer than
+    :data:`MAX_WORDS_PER_LAW` words are truncated with a ``[truncated]``
+    notice to keep the LLM context within limits.
+
+    Args:
+        laws: List of law-section dicts, each with at least ``"id"``,
+            ``"text"``, and ``"matched_queries"`` keys (as returned by
+            :func:`~rag.retrieval.index_and_retrieve.retrieve`).
+
+    Returns:
+        str: The formatted, double-newline-separated string of all sections.
+    """
     blocks = []
     for p in laws:
         words = p["text"].split()
@@ -155,6 +241,24 @@ def format_laws(laws):
 
 
 def main():
+    """Entry point for the three-step accident analysis CLI.
+
+    Steps performed:
+
+    1. Parses CLI arguments.
+    2. Loads the vector-store parents index.
+    3. Calls :func:`_call_groq` with :data:`EXTRACT_SYSTEM` to extract
+       structured facts, search queries, and relevant section numbers from the
+       accident description.
+    4. Retrieves the top-k law sections using the extracted queries and section
+       picks via :func:`~rag.retrieval.index_and_retrieve.retrieve`.
+    5. Calls :func:`_call_groq` with :data:`ANALYZE_SYSTEM` to produce a
+       fault analysis grounded only in the retrieved sections.
+    6. Prints the analysis and optionally saves a Markdown report.
+
+    Returns:
+        None
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="./out")
     ap.add_argument("--file", help="text file with the accident description")

@@ -1,4 +1,16 @@
-"""Prompts for the CCTV accident analyzer."""
+"""Prompts for the CCTV accident analyzer.
+
+Contains the system prompt and two user-turn prompt templates used by
+:mod:`analyze_video`:
+
+- :data:`SYSTEM_PROMPT` — instructs the VLM to act as a careful CCTV analyst.
+- :data:`TRAFFIC_ANALYSIS_PROMPT` — a general-purpose traffic incident analysis
+  template.
+- :func:`build_accident_prompt` — builds a structured, section-headed accident
+  report prompt for a specific clip length and frame count.
+
+The older ``_ACCIDENT_TEMPLATE`` is kept verbatim for A/B comparison purposes.
+"""
 
 SYSTEM_PROMPT = (
     "You are a careful CCTV traffic-incident analyst. You write detailed reports "
@@ -41,6 +53,24 @@ Keep the report to what the frames show. Leave out fault, causes, speed estimate
 
 
 def build_accident_prompt(n_frames: int, duration_s: float) -> str:
+    """Render the structured accident-report prompt for a specific clip.
+
+    Substitutes the actual frame count and clip duration into
+    :data:`_ACCIDENT_TEMPLATE` so the VLM knows exactly how many frames were
+    sampled and over what time span.
+
+    Args:
+        n_frames: Number of frames that were sampled from the clip.
+        duration_s: Total duration of the clip in seconds.
+
+    Returns:
+        str: The fully rendered prompt string ready to send to the VLM.
+
+    Example:
+        >>> prompt = build_accident_prompt(32, 15.0)
+        >>> "32 frames" in prompt
+        True
+    """
     return _ACCIDENT_TEMPLATE.replace("{N}", str(n_frames)).replace(
         "{D}", f"{duration_s:.1f}"
     )

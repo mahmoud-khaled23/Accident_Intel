@@ -1,8 +1,24 @@
-"""
-index_and_retrieve.py
----------------------
+"""Dense + BM25 hybrid retrieval engine for the traffic-law RAG pipeline.
+
+Supports three retrieval modes:
+
+- ``"dense"``  — BAAI/bge-m3 embedding similarity via ChromaDB.
+- ``"bm25"``   — keyword search with ``rank_bm25.BM25Okapi``.
+- ``"hybrid"`` — both fused with Reciprocal Rank Fusion (default).
+
+Key functions:
+    :func:`index`    — embed child chunks and persist them to a local Chroma store.
+    :func:`retrieve` — run one or more queries and return the top-k parent sections.
+    :func:`load`     — load the pre-built ``parents.json`` / ``children.jsonl`` files.
+
+Utility functions:
+    :func:`tokenize`      — language-agnostic tokenizer supporting English and Arabic.
+    :func:`get_bm25`      — lazily build/cache a per-process BM25 index.
+    :func:`rrf_fuse`      — Reciprocal Rank Fusion combiner.
+    :func:`merge_rankings` — round-robin interleaving of per-query ranked lists.
+
 1) Index:     python index_and_retrieve.py index --out ./out
-2) Retrieve:  python index_and_retrieve.py search --out ./out \
+2) Retrieve:  python index_and_retrieve.py search --out ./out \\
                   -q "failure to yield right of way" -q "unsafe lane change"
               (default mode is hybrid = dense + BM25 fused with Reciprocal Rank Fusion)
 
@@ -28,11 +44,27 @@ _index_lock = Lock()
 
 @lru_cache(maxsize=1)
 def get_embedding_model():
+    """Load and cache the BGE-M3 sentence-transformer embedding model.
+
+    The model is loaded on CPU and cached for the lifetime of the process so
+    that repeated calls never re-initialise it.
+
+    Returns:
+        SentenceTransformer: The loaded :data:`MODEL_NAME` model instance.
+    """
     return SentenceTransformer(MODEL_NAME, device="cpu")
 
 
 @lru_cache(maxsize=1)
 def get_reranker():
+    """Load and cache the BGE cross-encoder reranker model.
+
+    Used only when ``rerank=True`` is passed to :func:`retrieve`.  Loaded on
+    CPU and cached for the lifetime of the process.
+
+    Returns:
+        CrossEncoder: The loaded :data:`RERANKER_NAME` cross-encoder instance.
+    """
     from sentence_transformers import CrossEncoder
     return CrossEncoder(RERANKER_NAME, device="cpu")
 
@@ -58,7 +90,21 @@ _BM25_CACHE = {}
 
 
 def get_bm25(out, children):
-    """BM25 index over the 'core' child chunks (same filter as the dense search). Built once per process."""
+    """Build (or return from cache) a BM25 index over the core child chunks.
+
+    Filters ``children`` to only ``"core"`` category records (the same filter
+    used by the dense search) before building the index.  The index is cached
+    in :data:`_BM25_CACHE` keyed by the resolved absolute path of ``out`` so
+    that multiple calls with the same directory never rebuild it.
+
+    Args:
+        out: Path to the output directory used as a cache key.
+        children: List of child-chunk dicts loaded from ``children.jsonl``.
+
+    Returns:
+        tuple[BM25Okapi, list[str]]: The BM25 index and the parallel list of
+        chunk IDs, both restricted to ``"core"`` chunks.
+    """
     key = str(Path(out).resolve())
     if key not in _BM25_CACHE:
         from rank_bm25 import BM25Okapi
@@ -68,11 +114,30 @@ def get_bm25(out, children):
 
 
 def rrf_fuse(rank_lists, weights, k=60):
-    """
-    Reciprocal Rank Fusion. rank_lists[i] = [chunk_id, ...] best first.
-    score(id) = sum_i  weights[i] / (k + rank_i(id))      (rank starts at 1)
-    Returns [(chunk_id, rrf_score), ...] best first. Only ranks matter, so dense distances and
-    BM25 scores (different scales) can be combined without normalising.
+    """Combine multiple ranked lists using Reciprocal Rank Fusion (RRF).
+
+    Assigns each item a score of ``sum_i weights[i] / (k + rank_i(item))``
+    where ``rank_i`` is the 1-based position in the ``i``-th list.  Items that
+    do not appear in a list are not penalised — they simply receive no
+    contribution from that list.  The constant ``k`` (default 60) controls
+    how steeply rank differences are rewarded.
+
+    Because only ranks matter, lists with incompatible scales (e.g. cosine
+    distances and BM25 scores) can be combined without normalisation.
+
+    Args:
+        rank_lists: A list of ranked ID lists (each list is best-first).
+        weights: A list of per-list weights (same length as ``rank_lists``).
+        k: The RRF constant.  Higher values produce a flatter fusion.
+            Defaults to ``60``.
+
+    Returns:
+        list[tuple[str, float]]: ``(chunk_id, rrf_score)`` pairs sorted by
+        descending RRF score (best first).
+
+    Example:
+        >>> rrf_fuse([["a", "b", "c"], ["b", "a"]], [1.0, 1.0])
+        [('b', ...), ('a', ...), ('c', ...)]
     """
     scores = {}
     for lst, w in zip(rank_lists, weights):
@@ -83,19 +148,59 @@ def rrf_fuse(rank_lists, weights, k=60):
 
 # ---------------------------------------------------------------- storage
 def load(out):
-    out = Path(out)
+    """Load the pre-built parents index and children chunk list from disk.
+
+    Expects ``<out>/parents.json`` (a dict of section records) and
+    ``<out>/children.jsonl`` (one JSON object per line).
+
+    Args:
+        out: Path to the directory produced by the indexing step.
+
+    Returns:
+        tuple[dict, list[dict]]: ``(parents, children)`` where ``parents``
+        maps section IDs to their full records and ``children`` is a list of
+        chunk dicts.
+
+    Raises:
+        FileNotFoundError: If either ``parents.json`` or ``children.jsonl`` is
+            missing from ``out``.
+    """
     parents = json.loads((out / "parents.json").read_text(encoding="utf-8"))
     children = [json.loads(l) for l in open(out / "children.jsonl", encoding="utf-8")]
     return parents, children
 
 
 def get_collection(out):
-    client = chromadb.PersistentClient(str(Path(out) / "chroma"))
+    """Open (or create) the Chroma collection for traffic-law chunks.
+
+    Uses a persistent Chroma client rooted at ``<out>/chroma``.  The
+    collection is named ``"traffic_laws"`` with cosine distance.
+
+    Args:
+        out: Path to the output directory containing the ``chroma/`` subdirectory.
+
+    Returns:
+        chromadb.Collection: The existing or newly created collection.
+    """
     return client.get_or_create_collection("traffic_laws", metadata={"hnsw:space": "cosine"})
 
 
 def index(out):
-    """Embed every child chunk and store it in a local Chroma database. (BM25 needs no indexing step.)"""
+    """Embed every child chunk and upsert it into the local Chroma database.
+
+    Only ``"core"`` category chunks are considered by retrieval, but all
+    chunks are embedded here so the collection stays consistent with the full
+    ``children.jsonl``.  Embeddings are computed in batches of 64 with L2
+    normalisation.  Running this on an already-indexed directory is safe —
+    Chroma's ``upsert`` is idempotent.
+
+    Args:
+        out: Path to the directory containing ``children.jsonl`` and the
+            ``chroma/`` subdirectory.
+
+    Returns:
+        None
+    """
     _, children = load(out)
     model = get_embedding_model()
     col = get_collection(out)
@@ -114,11 +219,24 @@ def index(out):
 
 
 def merge_rankings(ranked_lists, queries, max_total):
-    """
-    ranked_lists[i] = [(parent_id, value), ...] for queries[i], best (lowest value) first.
-    Interleave them round-robin (best of each query first, then second best of each...) so that
-    every query contributes, instead of one strong query crowding out the others.
-    Returns [(parent_id, [queries that matched it], best_value), ...] capped at max_total.
+    """Interleave per-query ranked parent lists in round-robin order.
+
+    Ensures every query contributes results before any single strong query
+    fills all slots.  The best result from each query is collected first,
+    then the second-best from each, and so on.
+
+    Args:
+        ranked_lists: A list of per-query ranked lists.  Each inner list
+            contains ``(parent_id, value)`` pairs sorted best-first (lowest
+            value = best when ``value`` is a distance).
+        queries: The query strings corresponding to each inner list, used to
+            record which queries matched a section.
+        max_total: Maximum number of unique parent IDs to return.
+
+    Returns:
+        list[tuple[str, list[str], float]]: Up to ``max_total`` tuples of
+        ``(parent_id, matched_queries, best_value)`` in the round-robin order
+        they were first encountered.
     """
     order, matched, best = [], {}, {}
     depth = max((len(l) for l in ranked_lists), default=0)
@@ -137,25 +255,78 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
              rerank=False, k_children=10, rerank_pool=30, debug=False,
              mode="hybrid", rrf_k=60, w_dense=1.0, w_bm25=1.0,
              expand="none", n_variants=3, glossary_path=None):
-    """
-    expand      : "none" | "rules" | "llm" | "both"  - legal query normalization/expansion applied BEFORE the
-                  search (see query_expansion.py). Originals are served first, variants fill in.
+    """Retrieve the top-k parent law sections most relevant to the given queries.
 
-    Returns AT MOST `top_k` full law sections (the standard RAG "top_k").
+    Runs a multi-query retrieval pipeline over the local vector store and BM25
+    index.  Each query independently ranks small child chunks; the rankings are
+    fused (optionally re-ranked) and merged in round-robin order so that every
+    query contributes.
 
-    1. For EACH query, rank the small child chunks:
-         mode="dense"  : embedding similarity only
-         mode="bm25"   : keyword (BM25) only
-         mode="hybrid" : both, fused with Reciprocal Rank Fusion (weights w_dense / w_bm25)
-       then rank the parent sections they belong to (best chunk wins).
-    2. Merge the queries round-robin (best of every query first) and keep the first `top_k`.
-    3. expand_refs=True: sections referenced by the first `refs_from_top` results may fill any
-       slots that are still free, but the total never goes above `top_k`.
+    Retrieval pipeline:
 
-    rerank=True : the fused candidate chunks are re-scored with a cross-encoder, which reads
-                  query + chunk together (more precise, slower).
-    per_query   : how many sections each query may contribute (default: top_k).
-    Each returned section has "matched_queries", "score" and "score_kind".
+    1. Optionally expand queries using legal normalisation rules or an LLM
+       (controlled by ``expand``).
+    2. For each query, rank child chunks via the chosen ``mode``:
+
+       - ``"dense"``  — cosine similarity with the BGE-M3 embedding model.
+       - ``"bm25"``   — BM25Okapi keyword score.
+       - ``"hybrid"`` — RRF fusion of both (default).
+
+    3. Optionally re-score the fused candidate chunks with the BGE
+       cross-encoder (``rerank=True``).
+    4. Map chunk scores back to parent sections (best chunk wins per section).
+    5. Merge per-query parent lists with :func:`merge_rankings`.
+    6. Optionally append sections referenced by the top results
+       (``expand_refs=True``).
+
+    Note: On the first call, if the Chroma collection is empty, the index is
+    built automatically — this may take several minutes.
+
+    Args:
+        queries: One or more search query strings.
+        out: Path to the directory containing ``parents.json``,
+            ``children.jsonl``, and ``chroma/``.
+        top_k: Maximum number of parent sections to return.  Defaults to ``5``.
+        per_query: Maximum sections a single query may contribute.
+            Defaults to ``top_k``.
+        expand_refs: If ``True``, fill remaining slots with sections referenced
+            by the first ``refs_from_top`` results.  Defaults to ``False``.
+        refs_from_top: How many top results to expand references from.
+            Defaults to ``2``.
+        rerank: Re-score candidates with the cross-encoder.  Slower but more
+            accurate.  Defaults to ``False``.
+        k_children: Chunks fetched per query in non-rerank mode.
+            Defaults to ``10``.
+        rerank_pool: Candidate chunks fetched per query when ``rerank=True``.
+            Defaults to ``30``.
+        debug: Print the top-15 chunks per query with their scores.
+            Defaults to ``False``.
+        mode: Retrieval mode — ``"dense"``, ``"bm25"``, or ``"hybrid"``.
+            Defaults to ``"hybrid"``.
+        rrf_k: RRF constant (see :func:`rrf_fuse`).  Defaults to ``60``.
+        w_dense: Weight of the dense ranking in hybrid mode.  Defaults to ``1.0``.
+        w_bm25: Weight of the BM25 ranking in hybrid mode.  Defaults to ``1.0``.
+        expand: Query expansion method — ``"none"``, ``"rules"``, ``"llm"``,
+            or ``"both"``.  Defaults to ``"none"``.
+        n_variants: Max extra queries generated per original query when
+            ``expand`` is not ``"none"``.  Defaults to ``3``.
+        glossary_path: Optional path to a JSON file that extends the built-in
+            legal glossary used by the ``"rules"`` expander.
+
+    Returns:
+        list[dict]: Up to ``top_k`` parent-section dicts.  Each dict is a copy
+        of the record from ``parents.json`` augmented with:
+
+        - ``"matched_queries"`` (list[str]): queries that surfaced this section.
+        - ``"score"`` (float): The best score for this section across queries.
+          Higher is better for rerank/BM25/hybrid; lower is better for dense.
+        - ``"score_kind"`` (str): Human-readable description of what the score
+          means (e.g. ``"RRF score (higher=better)"``).
+
+    Example:
+        >>> laws = retrieve(["failure to yield at intersection"], "./out", top_k=3)
+        >>> laws[0]["id"]
+        'VTL-1140'
     """
     per_query = per_query or top_k
     queries = expand_queries(queries, method=expand, n_variants=n_variants,
