@@ -1,4 +1,14 @@
-"""Accident reasoning service — wraps src/reasoning and validates the structured report."""
+"""Accident reasoning service — wraps src/reasoning and validates the structured report.
+
+Provides a single public function :func:`analyze_accident` that produces a
+structured liability assessment from the VLM description, tracking data, and
+retrieved laws.
+
+In mock mode a hard-coded :data:`_MOCK_REPORT` is returned immediately.  In
+real mode the function calls
+:func:`reasoning.reasoning_accident.analyze_accident` and validates the
+response against :class:`~schemas.accident.ReasoningReport`.
+"""
 import sys
 from pathlib import Path
 
@@ -47,6 +57,7 @@ _MOCK_REPORT = {
         "Mock analysis — real OpenAI reasoning not enabled",
     ],
 }
+"""Canned liability report returned when ``settings.reasoning_mock = True``."""
 
 
 def analyze_accident(
@@ -56,7 +67,32 @@ def analyze_accident(
     settings,
     user_context: dict | None = None,
 ) -> dict:
-    """Return a structured liability assessment dict."""
+    """Return a structured liability assessment dict.
+
+    In mock mode returns :data:`_MOCK_REPORT` immediately.  In real mode:
+    1. Calls :func:`reasoning.reasoning_accident.analyze_accident` with the
+       description, compressed tracking summary, and retrieved laws.
+    2. Validates the raw response against
+       :class:`~schemas.accident.ReasoningReport` to ensure it is well-formed.
+    3. Raises :class:`RuntimeError` on validation errors so the pipeline
+       marks the accident as failed rather than storing malformed data.
+
+    Args:
+        description: VLM scene description string from the VLM service.
+        tracking_data: Full tracking result dict from the tracking service.
+        laws: List of retrieved traffic-law entry dicts.
+        settings: Application settings with reasoning API credentials and
+            model selection.
+        user_context: Optional dict with user-supplied context fields such as
+            ``location``, ``date_time``, ``description``, and ``notes``.
+
+    Returns:
+        A dict matching the :class:`~schemas.accident.ReasoningReport` shape.
+
+    Raises:
+        RuntimeError: If the reasoning module raises, or if the response fails
+            schema validation.
+    """
     if settings.reasoning_mock:
         return _MOCK_REPORT
 

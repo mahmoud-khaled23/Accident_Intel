@@ -1,4 +1,11 @@
-"""Vehicle tracking service — wraps src/vehicle_tracking/tracker.py."""
+"""Vehicle tracking service — wraps src/vehicle_tracking/tracker.py.
+
+Provides two public functions used by the accidents pipeline:
+
+* :func:`run_tracking` — run YOLO-based vehicle tracking on a video file.
+* :func:`summarize_tracking` — compress tracking data to a size safe to
+  pass to an LLM context window.
+"""
 import sys
 from pathlib import Path
 
@@ -17,10 +24,37 @@ def run_tracking(
     mock: bool = False,
     model_path: str = "yolo11x.pt",
 ) -> dict:
-    """Run vehicle tracking and return a trajectory dict.
+    """Run vehicle tracking on a video and return a trajectory dict.
 
-    When mock=True a realistic fake response is returned immediately.
-    When mock=False the real YOLO tracker is invoked.
+    When ``mock=True`` a realistic fake response is returned immediately
+    without loading any models. When ``mock=False`` the real YOLO tracker is
+    invoked via :func:`vehicle_tracking.tracker.process_video`.
+
+    The output dict always contains:
+    * ``vehicle_count`` — number of unique tracked vehicles.
+    * ``duration_seconds`` — video duration.
+    * ``fps`` — video frame rate.
+    * ``trajectories`` — list of per-vehicle trajectory dicts, each with
+      ``id``, ``class``, and a ``frames`` list.
+
+    In real mode, an ``accident_candidates`` key is also present with
+    heuristic collision candidates from
+    :func:`vehicle_tracking.accident_candidates.identify_accident_candidates`.
+
+    Args:
+        video_path: Absolute path to the input video file.
+        accident_id: Unique identifier used to name output files.
+        output_dir: Directory where the annotated video and trajectory JSON
+            are written.
+        mock: Return mock data without running inference.
+        model_path: YOLO model file path or name (e.g. ``"yolo11x.pt"``).
+
+    Returns:
+        A dict with tracking results as described above.
+
+    Raises:
+        RuntimeError: If ``mock=False`` and the ``vehicle_tracking`` package
+            is not importable.
     """
     if mock:
         return {
@@ -98,7 +132,19 @@ def run_tracking(
 
 
 def summarize_tracking(data: dict) -> dict:
-    """Bound the model context regardless of video length; never invent speeds."""
+    """Compress tracking data to a size safe for an LLM context window.
+
+    Limits to 100 vehicles and 8 sampled frames per vehicle. Never invents
+    speed values — only positional bounding-box data is included.
+
+    Args:
+        data: Full tracking result dict as returned by :func:`run_tracking`.
+
+    Returns:
+        A condensed dict with ``vehicle_count``, ``duration_seconds``,
+        ``width``, ``height``, ``vehicles`` (sampled), ``accident_candidates``
+        (up to 20), and a ``limitations`` disclaimer string.
+    """
     vehicles = []
     for track in data.get("trajectories", [])[:100]:
         frames = track.get("frames", [])

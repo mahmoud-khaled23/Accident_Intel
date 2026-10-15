@@ -1,11 +1,23 @@
-"""SQLite database setup and CRUD helpers."""
+"""SQLite database setup and CRUD helpers.
+
+Provides functions to initialise the SQLite schema and perform create, read,
+update, and delete operations on both the ``accidents`` and
+``damage_assessments`` tables.  All functions open and close their own
+connections so they are safe to call from multiple threads.
+"""
 import json
 import sqlite3
 from datetime import datetime, timezone
 
 
 def init_db(db_path: str) -> None:
-    """Create tables if they don't already exist."""
+    """Create the ``accidents`` and ``damage_assessments`` tables if they don't already exist.
+
+    Also creates any missing parent directories for the database file.
+
+    Args:
+        db_path: Absolute or relative path to the SQLite database file.
+    """
     from pathlib import Path
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -33,13 +45,27 @@ def init_db(db_path: str) -> None:
 
 
 def get_conn(db_path: str) -> sqlite3.Connection:
-    """Return a sqlite3 connection with row_factory set."""
+    """Return a sqlite3 connection with ``row_factory`` set to :class:`sqlite3.Row`.
+
+    Using ``sqlite3.Row`` allows columns to be accessed by name.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        An open :class:`sqlite3.Connection` that must be closed by the caller.
+    """
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def _now_iso() -> str:
+    """Return the current UTC time as an ISO 8601 string.
+
+    Returns:
+        A string such as ``"2024-01-15T10:30:00+00:00"``.
+    """
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -48,6 +74,18 @@ def _now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 def create_accident(db_path: str, accident_id: str, data: dict) -> dict:
+    """Insert a new accident record into the database.
+
+    Args:
+        db_path: Path to the SQLite database.
+        accident_id: Unique identifier for the new accident.
+        data: Dict of accident fields to store as JSON. The ``status`` key
+            is extracted to populate the ``status`` column; it defaults to
+            ``"created"`` if not present.
+
+    Returns:
+        The stored record dict with ``id`` and ``created_at`` added.
+    """
     conn = get_conn(db_path)
     try:
         now = _now_iso()
@@ -62,6 +100,16 @@ def create_accident(db_path: str, accident_id: str, data: dict) -> dict:
 
 
 def get_accident(db_path: str, accident_id: str) -> dict | None:
+    """Fetch a single accident record by ID.
+
+    Args:
+        db_path: Path to the SQLite database.
+        accident_id: The accident's unique identifier.
+
+    Returns:
+        The accident record dict with ``id``, ``status``, and ``created_at``
+        merged in, or ``None`` if no record was found.
+    """
     conn = get_conn(db_path)
     try:
         row = conn.execute(
@@ -80,6 +128,23 @@ def get_accident(db_path: str, accident_id: str) -> dict | None:
 
 
 def update_accident(db_path: str, accident_id: str, updates: dict, *, only_if_idle: bool = False) -> dict | None:
+    """Merge ``updates`` into an existing accident record.
+
+    Reads the current JSON blob, merges ``updates`` into it, and writes it
+    back. The ``status`` column is also updated if ``updates`` contains a
+    ``"status"`` key.
+
+    Args:
+        db_path: Path to the SQLite database.
+        accident_id: The accident's unique identifier.
+        updates: Dict of fields to merge. ``"status"`` is handled specially.
+        only_if_idle: When ``True``, the update is skipped (returns ``None``)
+            if the record's current status is in :data:`ACTIVE_STATUSES`.
+
+    Returns:
+        The refreshed accident record dict, or ``None`` if the record does not
+        exist or the update was blocked by ``only_if_idle``.
+    """
     conn = get_conn(db_path)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -104,10 +169,25 @@ def update_accident(db_path: str, accident_id: str, updates: dict, *, only_if_id
 
 
 ACTIVE_STATUSES = {"processing", "tracking", "vlm_analysis", "law_retrieval", "reasoning"}
+"""Status values that indicate a background analysis job is currently running."""
 
 
 def claim_analysis(db_path: str, accident_id: str, is_demo: bool) -> bool:
-    """Atomically reserve a job and clear stale results before scheduling it."""
+    """Atomically reserve a job for analysis and clear any stale previous results.
+
+    Uses ``BEGIN IMMEDIATE`` to avoid a race where two callers simultaneously
+    try to start analysis on the same record.
+
+    Args:
+        db_path: Path to the SQLite database.
+        accident_id: The accident to claim.
+        is_demo: Whether this analysis uses mock (demo) data. Stored in the
+            record for display purposes.
+
+    Returns:
+        ``True`` if the job was successfully claimed.  ``False`` if the record
+        does not exist or is already in an :data:`ACTIVE_STATUSES` state.
+    """
     conn = get_conn(db_path)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -127,7 +207,15 @@ def claim_analysis(db_path: str, accident_id: str, is_demo: bool) -> bool:
 
 
 def recover_interrupted_analyses(db_path: str) -> None:
-    """Background tasks cannot survive a server restart; make them retryable."""
+    """Mark any in-progress analyses as failed after a server restart.
+
+    Background tasks cannot survive a process restart, so records left in an
+    active state would be permanently stuck. This function transitions them to
+    ``"failed"`` with a human-readable error message so the user can retry.
+
+    Args:
+        db_path: Path to the SQLite database.
+    """
     conn = get_conn(db_path)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -144,7 +232,20 @@ def recover_interrupted_analyses(db_path: str) -> None:
 
 
 def delete_accident(db_path: str, accident_id: str) -> bool:
-    """Delete an accident record. Returns True if it existed, False otherwise."""
+    """Delete an accident record from the database.
+
+    Args:
+        db_path: Path to the SQLite database.
+        accident_id: The accident's unique identifier.
+
+    Returns:
+        ``True`` if the record existed and was deleted, ``False`` if it was
+        not found.
+
+    Raises:
+        ValueError: If the accident's current status is in
+            :data:`ACTIVE_STATUSES` (analysis is running).
+    """
     conn = get_conn(db_path)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -164,6 +265,20 @@ def list_accidents(
     limit: int = 20,
     status: str | None = None,
 ) -> tuple[list[dict], int]:
+    """Return a paginated list of accident records.
+
+    Args:
+        db_path: Path to the SQLite database.
+        page: 1-based page number.
+        limit: Maximum number of records per page.
+        status: Optional status filter. When given, only records with this
+            status are returned.
+
+    Returns:
+        A tuple ``(items, total)`` where ``items`` is the list of accident
+        record dicts for the requested page and ``total`` is the count of
+        matching records across all pages.
+    """
     conn = get_conn(db_path)
     try:
         offset = (page - 1) * limit
@@ -200,6 +315,16 @@ def list_accidents(
 # ---------------------------------------------------------------------------
 
 def create_damage(db_path: str, assessment_id: str, data: dict) -> dict:
+    """Insert a new damage assessment record into the database.
+
+    Args:
+        db_path: Path to the SQLite database.
+        assessment_id: Unique identifier for the new assessment.
+        data: Dict of assessment fields stored as JSON.
+
+    Returns:
+        The stored record dict with ``id`` and ``created_at`` added.
+    """
     conn = get_conn(db_path)
     try:
         now = _now_iso()
@@ -214,6 +339,15 @@ def create_damage(db_path: str, assessment_id: str, data: dict) -> dict:
 
 
 def get_damage(db_path: str, assessment_id: str) -> dict | None:
+    """Fetch a single damage assessment record by ID.
+
+    Args:
+        db_path: Path to the SQLite database.
+        assessment_id: The assessment's unique identifier.
+
+    Returns:
+        The assessment record dict, or ``None`` if not found.
+    """
     conn = get_conn(db_path)
     try:
         row = conn.execute(
@@ -232,6 +366,16 @@ def get_damage(db_path: str, assessment_id: str) -> dict | None:
 
 
 def update_damage(db_path: str, assessment_id: str, updates: dict) -> dict | None:
+    """Merge ``updates`` into an existing damage assessment record.
+
+    Args:
+        db_path: Path to the SQLite database.
+        assessment_id: The assessment's unique identifier.
+        updates: Dict of fields to merge into the stored data blob.
+
+    Returns:
+        The refreshed assessment record dict, or ``None`` if not found.
+    """
     conn = get_conn(db_path)
     try:
         row = conn.execute(
@@ -253,6 +397,14 @@ def update_damage(db_path: str, assessment_id: str, updates: dict) -> dict | Non
 
 
 def list_damage(db_path: str) -> list[dict]:
+    """Return all damage assessment records ordered by creation date (newest first).
+
+    Args:
+        db_path: Path to the SQLite database.
+
+    Returns:
+        A list of assessment record dicts.
+    """
     conn = get_conn(db_path)
     try:
         rows = conn.execute(
@@ -271,6 +423,15 @@ def list_damage(db_path: str) -> list[dict]:
 
 
 def delete_damage(db_path: str, assessment_id: str) -> bool:
+    """Delete a damage assessment record from the database.
+
+    Args:
+        db_path: Path to the SQLite database.
+        assessment_id: The assessment's unique identifier.
+
+    Returns:
+        ``True`` if the record existed and was deleted, ``False`` otherwise.
+    """
     conn = get_conn(db_path)
     try:
         cur = conn.execute("DELETE FROM damage_assessments WHERE id = ?", (assessment_id,))
@@ -278,4 +439,3 @@ def delete_damage(db_path: str, assessment_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         conn.close()
-

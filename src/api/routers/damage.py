@@ -1,4 +1,20 @@
-"""Damage assessments router — supports both /api/damage and /api/damage-assessments."""
+"""Damage assessments router — supports both /api/damage and /api/damage-assessments.
+
+Provides endpoints for uploading car damage images, running cost estimation,
+and managing assessment records.  The same router is mounted at two prefixes
+for backward compatibility.
+
+Endpoint overview:
+    POST   /upload                   Upload images and run assessment immediately.
+    GET    /                         List all assessments.
+    GET    /images/{id}/{filename}   Serve a stored damage image.
+    GET    /{id}                     Fetch a single assessment.
+    POST   /{id}/corrections         Apply user corrections to detected parts.
+    DELETE /{id}                     Delete an assessment.
+    POST   /legacy                   Legacy: create an empty record (no images).
+    POST   /{id}/images              Legacy: upload images to an existing record.
+    POST   /{id}/estimate            Legacy: trigger background cost estimation.
+"""
 import re
 import uuid
 from pathlib import Path
@@ -20,7 +36,21 @@ ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 def _format_damage_record(record: dict) -> dict:
-    """Format an internal DB record into the DamageAssessmentRecord expected by the UI."""
+    """Format an internal DB record into the ``DamageAssessmentRecord`` shape expected by the UI.
+
+    Derives ``damagedParts``, ``repairItems``, and ``estimate`` fields from
+    the raw ``cost_report`` when they are not already stored in the record.
+    This allows the frontend to receive a consistent response shape regardless
+    of how the record was created.
+
+    Args:
+        record: Raw database record dict as returned by
+            :func:`~models.get_damage`.
+
+    Returns:
+        A dict with camelCase keys matching the ``DamageAssessmentRecord``
+        TypeScript interface used by the React frontend.
+    """
     vinfo = record.get("vehicle_info", {})
     cost_report = record.get("cost_report") or {}
     lines = cost_report.get("lines", [])
@@ -129,6 +159,16 @@ def _format_damage_record(record: dict) -> dict:
 
 
 def _row_to_response(record: dict) -> DamageResponse:
+    """Convert a raw DB record to a :class:`~schemas.damage.DamageResponse`.
+
+    Used only by legacy endpoints that return the ``DamageResponse`` schema.
+
+    Args:
+        record: Raw database record dict.
+
+    Returns:
+        A :class:`~schemas.damage.DamageResponse` instance.
+    """
     return DamageResponse(
         id=record["id"],
         status=record.get("status", ""),
@@ -140,7 +180,16 @@ def _row_to_response(record: dict) -> DamageResponse:
 
 
 def _run_damage_background(assessment_id: str, db_path: str, settings) -> None:
-    """Background task wrapper for damage assessment."""
+    """Background task wrapper for damage assessment.
+
+    Fetches the assessment record, runs the damage service, and writes the
+    cost report back to the database.  Sets ``status="failed"`` on any error.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        db_path: Path to the SQLite database.
+        settings: Application settings passed to the damage service.
+    """
     record = get_damage(db_path, assessment_id)
     if record is None:
         return
@@ -173,7 +222,32 @@ async def upload_and_assess_damage(
     tier: str = Form("mid"),
     settings=Depends(get_settings),
 ):
-    """Primary upload endpoint used by the React DamageEstimatorPage."""
+    """Primary upload endpoint used by the React DamageEstimatorPage.
+
+    Accepts one or more damage photos together with vehicle information,
+    runs the cost-estimation pipeline synchronously, stores the result, and
+    returns a formatted assessment record.
+
+    Falls back to a hardcoded placeholder result when the damage model is
+    unavailable, so the frontend always receives a well-formed response.
+
+    Args:
+        images: List of uploaded damage image files.
+        make: Vehicle manufacturer name.
+        model: Vehicle model name.
+        year: Vehicle model year.
+        color: Vehicle colour (optional).
+        mileage: Current odometer reading in km (optional).
+        vin: Vehicle identification number (optional).
+        repair_location: Preferred repair location (optional).
+        currency: Currency code for cost estimates. Defaults to ``"EGP"``.
+        tier: Market segment for labour-rate lookup.
+        settings: Injected application settings.
+
+    Returns:
+        A formatted damage assessment dict matching the ``DamageAssessmentRecord``
+        TypeScript interface.
+    """
     assessment_id = f"DMG-{uuid.uuid4().hex[:6].upper()}"
 
     dest_dir = Path("out") / "damage" / assessment_id / "images"
@@ -261,14 +335,36 @@ async def upload_and_assess_damage(
 
 @router.get("/")
 def list_damage_assessments(settings=Depends(get_settings)):
-    """List all damage assessments for history and dashboard."""
+    """List all damage assessments for history and dashboard.
+
+    Args:
+        settings: Injected application settings.
+
+    Returns:
+        A list of formatted assessment dicts.
+    """
     records = list_damage(str(settings.db_path))
     return [_format_damage_record(r) for r in records]
 
 
 @router.get("/images/{assessment_id}/{filename:path}")
 def serve_damage_image(assessment_id: str, filename: str):
-    """Serve uploaded damage images securely."""
+    """Serve uploaded damage images securely.
+
+    Resolves the path and verifies it is within the ``out/damage`` directory
+    to prevent path traversal attacks.
+
+    Args:
+        assessment_id: Assessment identifier used as the subdirectory name.
+        filename: Image filename (path component after the assessment ID).
+
+    Returns:
+        A :class:`~fastapi.responses.FileResponse` streaming the image.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 403: Path outside allowed root.
+        :class:`~fastapi.HTTPException` 404: Image not found.
+    """
     safe_name = Path(filename).name
     image_path = (Path("out") / "damage" / assessment_id / "images" / safe_name).resolve()
     allowed_root = (Path("out") / "damage").resolve()
@@ -293,7 +389,18 @@ def serve_damage_image(assessment_id: str, filename: str):
 
 @router.get("/{assessment_id}")
 def get_damage_endpoint(assessment_id: str, settings=Depends(get_settings)):
-    """Fetch single damage assessment."""
+    """Fetch a single damage assessment by ID.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        settings: Injected application settings.
+
+    Returns:
+        A formatted damage assessment dict.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 404: Assessment not found.
+    """
     record = get_damage(str(settings.db_path), assessment_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -306,7 +413,24 @@ def update_corrections(
     corrections: list[dict[str, Any]],
     settings=Depends(get_settings),
 ):
-    """Apply user-supplied corrections to damaged parts."""
+    """Apply user-supplied corrections to damaged parts.
+
+    Merges correction dicts into the current ``damagedParts`` list by
+    matching on ``id``, and marks each corrected part with
+    ``"source": "user"``.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        corrections: List of partial part dicts. Each must include ``"id"``
+            to identify the part to update.
+        settings: Injected application settings.
+
+    Returns:
+        The updated formatted assessment dict.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 404: Assessment not found.
+    """
     record = get_damage(str(settings.db_path), assessment_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -328,7 +452,15 @@ def update_corrections(
 
 @router.delete("/{assessment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_damage_assessment(assessment_id: str, settings=Depends(get_settings)):
-    """Delete a damage assessment record."""
+    """Delete a damage assessment record.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        settings: Injected application settings.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 404: Assessment not found.
+    """
     deleted = delete_damage(str(settings.db_path), assessment_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -341,6 +473,18 @@ def create_damage_assessment_legacy(
     body: DamageCreate,
     settings=Depends(get_settings),
 ):
+    """Create an empty damage assessment record without images.
+
+    Legacy endpoint preserved for backward compatibility. The primary
+    workflow uses ``POST /upload`` instead.
+
+    Args:
+        body: Vehicle information for the assessment.
+        settings: Injected application settings.
+
+    Returns:
+        A :class:`~schemas.damage.DamageResponse` with ``status="created"``.
+    """
     assessment_id = str(uuid.uuid4())
     data = {
         "status": "created",
@@ -363,6 +507,22 @@ async def upload_images(
     files: list[UploadFile],
     settings=Depends(get_settings),
 ):
+    """Upload additional images to an existing assessment record.
+
+    Legacy endpoint used after ``POST /legacy`` to attach images before
+    triggering estimation via ``POST /{id}/estimate``.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        files: List of image files to upload.
+        settings: Injected application settings.
+
+    Returns:
+        A dict with ``message`` and ``images`` keys.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 404: Assessment not found.
+    """
     record = get_damage(str(settings.db_path), assessment_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -389,6 +549,23 @@ def trigger_estimate(
     background_tasks: BackgroundTasks,
     settings=Depends(get_settings),
 ):
+    """Trigger background cost estimation for a legacy assessment record.
+
+    Schedules :func:`_run_damage_background` as a FastAPI background task.
+    Poll ``GET /{id}`` to check the result.
+
+    Args:
+        assessment_id: Target assessment identifier.
+        background_tasks: FastAPI background task queue.
+        settings: Injected application settings.
+
+    Returns:
+        A dict with ``status`` and ``message`` keys.
+
+    Raises:
+        :class:`~fastapi.HTTPException` 404: Assessment not found.
+        :class:`~fastapi.HTTPException` 409: Estimation already in progress.
+    """
     record = get_damage(str(settings.db_path), assessment_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")

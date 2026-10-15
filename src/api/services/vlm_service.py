@@ -1,4 +1,14 @@
-"""VLM video analysis service — wraps src/VLM (local Qwen2-VL or hosted vision API)."""
+"""VLM video analysis service — wraps src/VLM (local Qwen2-VL or hosted vision API).
+
+Provides a single public entry point :func:`analyze_video` that dispatches to
+the appropriate backend based on ``settings.video_vlm_api``.  A realistic mock
+description is returned when ``settings.vlm_mock`` is ``True``.
+
+Helper functions:
+    :func:`backend_info` — expose the active backend without leaking credentials.
+    :func:`_compact_tracking_context` — shrink tracking data for hosted APIs.
+    :func:`_analysis_prompt` — build the full VLM prompt with optional tracking context.
+"""
 import json
 import logging
 
@@ -36,6 +46,7 @@ constraints. The precise speed of each vehicle before the incident cannot be det
 from the available frames. The initial position of the motorcycle is partially obscured \
 by the hatchback for several frames prior to impact.\
 """
+"""Canned scene description returned when ``settings.vlm_mock = True``."""
 
 
 _HOSTED_ANALYSIS_PROMPT = """You are a cautious traffic-video evidence analyst. Inspect the supplied video frames in time order. Do not assume an accident occurred and do not infer fault, intent, exact speed, or traffic-law violations.
@@ -48,10 +59,21 @@ Final Observed State:
 Uncertainties and Limitations:
 
 Report only what is visually supported. For contact, a fall, a traffic signal, or any critical detail that is blurry, hidden, or not captured, say "unclear" rather than guessing. The tracking notes below are only approximate image-space observations; they do not prove contact or speed."""
+"""System prompt used for hosted OpenAI-compatible vision APIs."""
 
 
 def _compact_tracking_context(tracking_data: dict) -> dict:
-    """Bound tracking text so it cannot consume a hosted model's vision budget."""
+    """Compress tracking data to fit within a hosted model's vision token budget.
+
+    Limits to 12 vehicles and 5 accident candidates; omits per-frame detail.
+
+    Args:
+        tracking_data: Full tracking result dict from the tracking service.
+
+    Returns:
+        A minimal dict with ``vehicle_count``, ``duration_seconds``,
+        ``vehicles`` (up to 12), and ``candidate_notes`` (up to 5).
+    """
     vehicles = []
     for track in tracking_data.get("trajectories", [])[:12]:
         frames = track.get("frames", [])
@@ -77,6 +99,20 @@ def _compact_tracking_context(tracking_data: dict) -> dict:
 
 
 def _analysis_prompt(tracking_data: dict | None, *, compact: bool = False) -> str:
+    """Build the VLM analysis prompt, optionally appending tracking observations.
+
+    When ``compact=True`` the hosted-API prompt template is used and tracking
+    data is compacted to conserve vision-API token quota.  When ``compact=False``
+    the full local-model prompt from ``src/VLM/prompts.py`` is used.
+
+    Args:
+        tracking_data: Optional tracking result dict. When provided, the
+            tracking observations are serialised to JSON and appended.
+        compact: Use the compact hosted-API prompt and compacted tracking.
+
+    Returns:
+        The complete prompt string ready to send to the VLM.
+    """
     from src.VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
     from .tracking_service import summarize_tracking
 
@@ -91,6 +127,19 @@ def _analysis_prompt(tracking_data: dict | None, *, compact: bool = False) -> st
 
 
 def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | None = None) -> str:
+    """Run video analysis through an OpenAI-compatible hosted vision API.
+
+    Extracts frames from the video, selects up to ``settings.vlm_n_frames``
+    of them, and calls the hosted API via ``src/VLM/hosted.py``.
+
+    Args:
+        video_path: Path to the input video file.
+        settings: Application settings with hosted API credentials and limits.
+        tracking_data: Optional tracking context to append to the prompt.
+
+    Returns:
+        The VLM scene description string.
+    """
     from src.VLM.hosted import analyze_hosted
     from .video_service import inspect_video
 
@@ -110,7 +159,15 @@ def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | Non
 
 
 def backend_info(settings) -> dict:
-    """Expose the selected video model without exposing provider credentials."""
+    """Expose the selected video VLM backend without leaking credentials.
+
+    Args:
+        settings: Application settings.
+
+    Returns:
+        A dict with ``backend``, ``model``, and ``module`` keys describing
+        the active VLM backend.
+    """
     if settings.vlm_mock:
         return {"backend": "mock", "model": None, "module": None}
     if settings.video_vlm_api == "openai":
@@ -119,7 +176,22 @@ def backend_info(settings) -> dict:
 
 
 def analyze_video(video_path: str, accident_id: str, settings, tracking_data: dict | None = None) -> str:
-    """Use frames of the uploaded video, together with its actual tracking observations."""
+    """Analyse a video using the configured VLM backend.
+
+    Dispatches to the mock, hosted OpenAI-compatible, or local Qwen2-VL
+    backend depending on ``settings``.  The local model is loaded lazily and
+    cached in module-level variables to avoid reloading on every call.
+
+    Args:
+        video_path: Path to the input video file.
+        accident_id: Accident identifier used for logging.
+        settings: Application settings controlling which backend to use.
+        tracking_data: Optional tracking context from the tracking service.
+            When provided, a summary is appended to the VLM prompt.
+
+    Returns:
+        A multi-paragraph scene description string produced by the VLM.
+    """
     if settings.vlm_mock:
         return _MOCK_DESCRIPTION
     info = backend_info(settings)

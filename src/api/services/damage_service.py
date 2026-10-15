@@ -1,4 +1,11 @@
-"""Damage assessment service — wraps src/Car_damage_cost/pipeline.py."""
+"""Damage assessment service — wraps src/Car_damage_cost/pipeline.py.
+
+Provides a single public function :func:`run_damage_assessment` that runs the
+full car-damage detection and cost-estimation pipeline.
+
+``car_damage_cost`` uses bare-name imports (e.g. ``from config import Config``)
+so its own directory is inserted at the front of ``sys.path`` here.
+"""
 import sys
 from pathlib import Path
 
@@ -21,7 +28,27 @@ def run_damage_assessment(
 ) -> dict:
     """Run a damage assessment and return a cost report dict.
 
-    Uses mock data when settings.damage_mock is True.
+    In mock mode returns a hard-coded sample response immediately.
+    In real mode:
+    1. Loads the YOLO damage and parts segmentation models.
+    2. Runs :func:`car_damage_cost.pipeline.analyze_case` over all images.
+    3. Calls :func:`car_damage_cost.cost_engine.estimate_cost` to produce a
+       cost breakdown.
+    4. Falls back to a placeholder response if inference fails, logging a
+       warning rather than raising.
+
+    Args:
+        image_paths: List of absolute paths to the uploaded damage images.
+        vehicle_info: Dict with ``make``, ``model``, ``year``, ``tier``, and
+            optional ``currency`` keys.
+        assessment_id: Unique identifier for this assessment (used as the
+            ``case_id`` passed to ``analyze_case``).
+        settings: Application settings. ``settings.damage_mock`` controls
+            whether mock data is returned.
+
+    Returns:
+        A dict with keys ``car_info``, ``total_min``, ``total_max``,
+        ``currency``, ``lines``, ``notes``, and ``unpriced``.
     """
     if settings.damage_mock:
         return {

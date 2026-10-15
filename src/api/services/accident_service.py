@@ -1,4 +1,15 @@
-"""Sequential, persistent upload-to-report pipeline (one inference job at a time)."""
+"""Sequential, persistent upload-to-report pipeline (one inference job at a time).
+
+Runs the full analysis pipeline for a single accident in order:
+1. Vehicle tracking
+2. VLM scene description
+3. Traffic-law retrieval (RAG)
+4. Liability reasoning
+
+GPU access and local model caches are protected by a module-level lock so
+only one pipeline runs at a time.  Each step writes its results to the
+database immediately so partial results are available after a crash.
+"""
 import logging
 from threading import Lock
 
@@ -9,6 +20,23 @@ _inference_lock = Lock()
 
 
 def run_analysis_pipeline(accident_id: str, video_path: str, db_path: str, settings) -> None:
+    """Execute the full analysis pipeline for one accident, writing each step's results to the DB.
+
+    The function acquires :data:`_inference_lock` before running to serialise
+    GPU/model access.  The accident's ``status`` column is updated before and
+    after each step so the frontend can show fine-grained progress.
+
+    On any exception the accident is marked ``"failed"`` with the failing
+    stage and error message stored in the database.
+
+    Args:
+        accident_id: Identifier of the accident to analyse. Must already
+            exist in the database with status ``"processing"``.
+        video_path: Absolute path to the uploaded video file.
+        db_path: Path to the SQLite database file.
+        settings: Application :class:`~config.Settings` passed to each
+            service.
+    """
     from ..models import update_accident, get_accident
 
     # Keep queued jobs at processing; serialize GPU access and local model caches.

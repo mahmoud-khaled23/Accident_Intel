@@ -1,4 +1,14 @@
-"""Law retrieval service — wraps src/rag/retrieval/report_retrieval.py."""
+"""Law retrieval service — wraps src/rag/retrieval/report_retrieval.py.
+
+Provides two public functions:
+
+* :func:`retrieve_laws` — perform a semantic search over the traffic-law
+  corpus and return relevant law entries.
+* :func:`get_law_by_id` — look up a single law entry by its section ID.
+
+When ``settings.rag_mock`` is ``True`` both functions use the hard-coded
+:data:`_MOCK_LAWS` list so the API works without a built RAG index.
+"""
 import sys
 from pathlib import Path
 
@@ -46,15 +56,35 @@ _MOCK_LAWS = [
         "metadata": {"jurisdiction": "NYS VTL", "category": "core"},
     },
 ]
+"""Small set of mock traffic laws returned when ``settings.rag_mock = True``."""
 
 # Build a direct-lookup index from the mock list so get_law_by_id is O(1).
 _MOCK_LAWS_INDEX: dict[str, dict] = {item["section_id"]: item for item in _MOCK_LAWS}
+"""Dict index for O(1) mock-law lookup by section ID."""
 
 
 def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
     """Retrieve relevant traffic laws for the given accident description.
 
-    Returns a list of dicts with keys: section_id, title, content, score, metadata.
+    In mock mode returns :data:`_MOCK_LAWS` directly.  In real mode calls
+    :func:`rag.retrieval.report_retrieval.retrieve_for_report` with optional
+    query expansion.
+
+    Args:
+        description: Free-text accident description used as the retrieval query.
+        out_dir: Output directory path passed to the RAG retriever (the
+            Chroma index must already exist here in real mode).
+        settings: Application settings. ``settings.rag_mock``,
+            ``settings.rag_rerank``, and ``settings.rag_mode`` are
+            consulted.
+
+    Returns:
+        A list of dicts with keys ``section_id``, ``title``, ``content``,
+        ``score``, and ``metadata``.
+
+    Raises:
+        RuntimeError: If the ``rag`` package is not importable (real mode).
+        RuntimeError: If the RAG retrieval itself raises an exception.
     """
     if settings.rag_mock:
         return _MOCK_LAWS
@@ -102,10 +132,21 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
 def get_law_by_id(section_id: str, out_dir: str, settings) -> dict | None:
     """Return a single law entry by its section ID, or None if not found.
 
-    In mock mode this is a direct dict lookup against the in-memory index.
-    In real RAG mode a semantic search is used as a best-effort fallback because
-    the RAG backend does not expose a direct-by-ID retrieval API; the caller
-    should treat a None return as a definitive 404 only in mock mode.
+    In mock mode this is a direct dict lookup against the in-memory
+    :data:`_MOCK_LAWS_INDEX`. In real RAG mode a semantic search is used as a
+    best-effort fallback because the RAG backend does not expose a
+    direct-by-ID retrieval API; the caller should treat a ``None`` return as a
+    definitive 404 only in mock mode.
+
+    Args:
+        section_id: The law section identifier to look up
+            (e.g. ``"VTL-1140"``).
+        out_dir: Output directory path passed to :func:`retrieve_laws` in
+            real mode.
+        settings: Application settings.
+
+    Returns:
+        The matching law entry dict, or ``None`` if not found.
     """
     if settings.rag_mock:
         return _MOCK_LAWS_INDEX.get(section_id)
