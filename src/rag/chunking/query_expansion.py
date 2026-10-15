@@ -9,7 +9,7 @@ Legal Query Normalization + Expansion, to run BEFORE the hybrid (dense + BM25) s
 Methods:
   none  : only light normalization
   rules : normalization + glossary expansion (EN <-> AR, dialect -> formal, article refs). Free, offline.
-  llm   : normalization + Claude rewrites the question into legal-style queries (pip install anthropic,
+  llm   : normalization + Claude rewrites the question into legal-style queries (uv add anthropic,
           needs ANTHROPIC_API_KEY; model via QE_MODEL env var)
   both  : rules + llm
 

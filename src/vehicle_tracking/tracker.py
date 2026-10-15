@@ -10,7 +10,7 @@ from pathlib import Path
 
 import cv2
 
-DEFAULT_MODEL_PATH = "weights/vehicle_tracking/yolo11x.pt"
+DEFAULT_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "weights/vehicle_tracking/yolo11x.pt")
 VEHICLE_CLASSES = [2, 3, 5, 7]  # car, motorcycle, bus, truck (COCO ids)
 IMGSZ = 1024
 CONF = 0.25
@@ -75,6 +75,7 @@ def process_video(
             )
 
         if model is None:
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             model = YOLO(model_path)
 
         output_video.parent.mkdir(parents=True, exist_ok=True)

@@ -30,16 +30,20 @@ export function TrackingOverlay({ tracks, selectedId, currentTime, enabled, widt
       : tracks;
 
     for (const track of drawTracks) {
-      // Find the closest frame to currentTime
-      let closest: (typeof track.frames)[0] | null = null;
-      let minDelta = Infinity;
-      for (const frame of track.frames) {
-        const delta = Math.abs(frame.timestamp - currentTime);
-        if (delta < minDelta) {
-          minDelta = delta;
-          closest = frame;
-        }
+      // Trajectories are time ordered; binary search avoids scanning the entire
+      // video for every vehicle on every playback frame.
+      if (currentTime < track.firstSeen || currentTime > track.lastSeen + 0.1) continue;
+      let low = 0;
+      let high = track.frames.length;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (track.frames[mid].timestamp < currentTime) low = mid + 1;
+        else high = mid;
       }
+      const nearby = [track.frames[low - 1], track.frames[low]].filter(Boolean);
+      const closest = nearby.reduce<(typeof track.frames)[0] | undefined>((best, frame) =>
+        !best || Math.abs(frame.timestamp - currentTime) < Math.abs(best.timestamp - currentTime) ? frame : best, undefined);
+      const minDelta = closest ? Math.abs(closest.timestamp - currentTime) : Infinity;
 
       if (!closest || minDelta > TOLERANCE) continue;
 

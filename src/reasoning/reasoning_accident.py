@@ -174,6 +174,11 @@ def analyze_accident(
             response_format={"type": "json_object"},
         )
         response_text = response.choices[0].message.content or ""
+    except openai.AuthenticationError as exc:
+        raise RuntimeError(
+            "Reasoning API authentication failed. Verify OPENAI_API_KEY and OPENAI_BASE_URL "
+            "in the server .env, then restart the API and retry."
+        ) from exc
     except Exception as exc:
         raise RuntimeError(f"Reasoning model request failed: {exc}") from exc
     finally:

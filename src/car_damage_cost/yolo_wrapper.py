@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from schemas import Detection
+from .schemas import Detection
 
 
 class YoloSegWrapper:

@@ -22,7 +22,7 @@ Utility functions:
                   -q "failure to yield right of way" -q "unsafe lane change"
               (default mode is hybrid = dense + BM25 fused with Reciprocal Rank Fusion)
 
-pip install sentence-transformers chromadb rank-bm25
+uv sync --locked
 """
 import argparse
 import json
@@ -30,9 +30,6 @@ import re
 from functools import lru_cache
 from threading import Lock
 from pathlib import Path
-
-import chromadb
-from sentence_transformers import SentenceTransformer
 
 from ..chunking.build_chunks import resolve_ref
 from ..chunking.query_expansion import expand_queries
@@ -52,6 +49,7 @@ def get_embedding_model():
     Returns:
         SentenceTransformer: The loaded :data:`MODEL_NAME` model instance.
     """
+    from sentence_transformers import SentenceTransformer
     return SentenceTransformer(MODEL_NAME, device="cpu")
 
 
@@ -105,12 +103,17 @@ def get_bm25(out, children):
         tuple[BM25Okapi, list[str]]: The BM25 index and the parallel list of
         chunk IDs, both restricted to ``"core"`` chunks.
     """
-    key = str(Path(out).resolve())
-    if key not in _BM25_CACHE:
+    core = [c for c in children if c["category"] == "core"]
+    if not core or not any(tokenize(c["text"]) for c in core):
+        raise ValueError("The traffic-law corpus has no searchable core chunks. Rebuild the chunks first.")
+    key = (str(Path(out).resolve()), tuple((c["id"], c["text"]) for c in core))
+    cached = _BM25_CACHE.get(key)
+    if cached is None:
         from rank_bm25 import BM25Okapi
-        core = [c for c in children if c["category"] == "core"]
-        _BM25_CACHE[key] = (BM25Okapi([tokenize(c["text"]) for c in core]), [c["id"] for c in core])
-    return _BM25_CACHE[key]
+        cached = (BM25Okapi([tokenize(c["text"]) for c in core]), [c["id"] for c in core])
+        _BM25_CACHE.clear()
+        _BM25_CACHE[key] = cached
+    return cached
 
 
 def rrf_fuse(rank_lists, weights, k=60):
@@ -165,8 +168,16 @@ def load(out):
         FileNotFoundError: If either ``parents.json`` or ``children.jsonl`` is
             missing from ``out``.
     """
+    out = Path(out)
+    missing = [name for name in ("parents.json", "children.jsonl") if not (out / name).is_file()]
+    if missing:
+        raise FileNotFoundError(f"Traffic-law corpus missing in {out}: {', '.join(missing)}. "
+                                "Set RAG_OUT_DIR or run uv run python -m src.rag.chunking.build_chunks.")
     parents = json.loads((out / "parents.json").read_text(encoding="utf-8"))
-    children = [json.loads(l) for l in open(out / "children.jsonl", encoding="utf-8")]
+    with (out / "children.jsonl").open(encoding="utf-8") as source:
+        children = [json.loads(line) for line in source if line.strip()]
+    if not parents or not children:
+        raise ValueError(f"Traffic-law corpus is empty in {out}.")
     return parents, children
 
 
@@ -182,6 +193,7 @@ def get_collection(out):
     Returns:
         chromadb.Collection: The existing or newly created collection.
     """
+    import chromadb
     client = chromadb.PersistentClient(path=str(Path(out) / "chroma"))
     return client.get_or_create_collection("traffic_laws", metadata={"hnsw:space": "cosine"})
 
@@ -329,6 +341,10 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
         >>> laws[0]["id"]
         'VTL-1140'
     """
+    if mode not in {"dense", "bm25", "hybrid"}:
+        raise ValueError(f"Unknown retrieval mode: {mode}")
+    if top_k < 1:
+        return []
     per_query = per_query or top_k
     queries = expand_queries(queries, method=expand, n_variants=n_variants,
                              glossary_path=glossary_path, debug=debug)

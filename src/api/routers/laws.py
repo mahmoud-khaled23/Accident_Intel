@@ -4,7 +4,7 @@ Provides endpoints for searching the traffic-law corpus and fetching
 individual law entries by their section ID. All routes are prefixed with
 ``/api/laws``.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import get_settings
 from ..schemas.law import LawResult, LawSearchResponse
@@ -18,7 +18,7 @@ def search_laws(
     q: str = "",
     jurisdiction: str = "",
     topic: str = "",
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=100),
     settings=Depends(get_settings),
 ):
     """Search the traffic-law corpus by query string.
@@ -56,7 +56,10 @@ def search_laws(
             return LawSearchResponse(results=results, query=q, total=len(results))
         return LawSearchResponse(results=[], query=q, total=0)
 
-    raw = law_service.retrieve_laws(q, str(settings.rag_out_dir), settings)
+    try:
+        raw = law_service.retrieve_laws(q, str(settings.rag_out_dir), settings)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
     results = [
         LawResult(
@@ -85,9 +88,11 @@ def get_law(section_id: str, settings=Depends(get_settings)):
     Raises:
         :class:`~fastapi.HTTPException` 404: Section ID not found.
     """
-    item = law_service.get_law_by_id(section_id, str(settings.rag_out_dir), settings)
+    try:
+        item = law_service.get_law_by_id(section_id, str(settings.rag_out_dir), settings)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
     if item is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Law section '{section_id}' not found")
     return LawResult(
         section_id=item["section_id"],

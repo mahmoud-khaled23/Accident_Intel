@@ -17,12 +17,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from config import Config
-from cost_engine import estimate_cost, load_tables
-from pipeline import analyze_case
-from schemas import CarInfo
-from vlm_client import VlmClient
-from yolo_wrapper import YoloSegWrapper
+from .config import Config
+from .cost_engine import estimate_cost, load_tables
+from .pipeline import analyze_case
+from .schemas import CarInfo
+from .vlm_client import VlmClient
+from .yolo_wrapper import YoloSegWrapper
 
 
 def main() -> None:
@@ -80,7 +80,7 @@ def main() -> None:
     agent = None
     if not args.no_price_agent:
         if cfg.gemini_api_key:
-            from price_agent import PriceAgent
+            from .price_agent import PriceAgent
             agent = PriceAgent(cfg.gemini_api_key, cfg.gemini_model, cfg.price_cache_path)
         else:
             print("\nGEMINI_API_KEY not set -> using the placeholder price table")

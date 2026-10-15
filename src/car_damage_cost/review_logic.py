@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from schemas import UNKNOWN_PART, FusedDamage, Severity
+from .schemas import UNKNOWN_PART, FusedDamage, Severity
 
 PART_NAMES = [
     "back-bumper", "back-windshield", "front-bumper", "grille", "hood",

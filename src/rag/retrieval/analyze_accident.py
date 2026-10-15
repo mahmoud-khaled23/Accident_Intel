@@ -17,17 +17,16 @@ By default uses the Groq API with ``openai/gpt-oss-120b``.  Set
 Key functions: :func:`build_catalog`, :func:`_call_groq`, :func:`main`.
 
 Setup:
-    pip install openai
+    uv sync --locked
     Set GROQ_API_KEY below or pass --api-key
 
 Usage:
-    python -m src.rag.retrieval.analyze_accident --out src/rag/chunking/out --file accident_example.txt
-    python -m src.rag.retrieval.analyze_accident --out src/rag/chunking/out --text "Car A ran a red light..." --lang ar
+    uv run python -m src.rag.retrieval.analyze_accident --out data/traffic_laws/chunks --file accident_example.txt
+    uv run python -m src.rag.retrieval.analyze_accident --out data/traffic_laws/chunks --text "Car A ran a red light..." --lang ar
 """
 import argparse
 import json
 import re
-import sys
 import time
 from pathlib import Path
 import dotenv
@@ -35,10 +34,7 @@ import os
 
 dotenv.load_dotenv()  # load GROQ_API_KEY from .env if present
 
-# ── make src/ importable when run as a module ─────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from rag.retrieval.index_and_retrieve import load, retrieve   # noqa: E402
+from .index_and_retrieve import load, retrieve   # noqa: E402
 
 # ===========================================================================
 # 🔑  PUT YOUR GROQ API KEY HERE

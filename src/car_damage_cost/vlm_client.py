@@ -18,7 +18,7 @@ import cv2
 import httpx
 import numpy as np
 
-from schemas import Detection, Severity
+from .schemas import Detection, Severity
 
 
 class VlmClient:

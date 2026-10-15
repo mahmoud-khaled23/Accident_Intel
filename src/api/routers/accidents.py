@@ -46,6 +46,7 @@ from ..schemas.accident import AccidentCreate, AccidentResponse, AnalysisStatus
 from ..schemas.common import PaginatedResponse
 from ..services import accident_service
 from ..services.video_service import inspect_video
+from src.video_understanding.backend import VideoBackend
 
 router = APIRouter(prefix="/api/accidents", tags=["accidents"])
 
@@ -128,6 +129,8 @@ def _row_to_response(record: dict) -> AccidentResponse:
         failed_stage=record.get("failed_stage"),
         is_demo_data=record.get("is_demo_data", False),
         video_metadata=record.get("video_metadata"),
+        video_vlm_api=record.get("video_vlm_api", "auto"),
+        video_vlm=record.get("video_vlm"),
     )
 
 
@@ -188,6 +191,7 @@ def create_accident_endpoint(
         "date_time": body.date_time,
         "description": body.description,
         "notes": body.notes,
+        "video_vlm_api": body.video_vlm_api or settings.video_vlm_api,
     }
     record = create_accident(str(settings.db_path), accident_id, data)
     return _row_to_response(record)
@@ -200,6 +204,7 @@ async def upload_accident(
     incident_date: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    video_vlm_api: VideoBackend | None = Form(None),
     settings=Depends(get_settings),
 ):
     """Combined endpoint: create accident record AND save video in one request.
@@ -240,6 +245,7 @@ async def upload_accident(
         "video_path": str(video_path),
         "video_filename": file.filename or "video.mp4",
         "video_metadata": metadata,
+        "video_vlm_api": video_vlm_api or settings.video_vlm_api,
     }
     try:
         record = create_accident(str(settings.db_path), accident_id, data)
@@ -289,7 +295,7 @@ async def upload_video(
         {"status": "uploaded", "video_path": str(video_path),
          "video_filename": file.filename or video_path.name, "video_metadata": metadata,
          "tracking_data": None, "vlm_description": None, "laws": None, "report": None,
-         "error": None, "failed_stage": None},
+         "error": None, "failed_stage": None, "video_vlm": None, "is_demo_data": False},
         only_if_idle=True,
     )
     if updated is None:
@@ -305,6 +311,7 @@ async def upload_video(
 def trigger_analysis(
     accident_id: str,
     background_tasks: BackgroundTasks,
+    video_vlm_api: VideoBackend | None = Query(None),
     settings=Depends(get_settings),
 ):
     """Trigger the background analysis pipeline for a video.
@@ -341,7 +348,7 @@ def trigger_analysis(
         raise HTTPException(status_code=400, detail="No video file found — upload a video first")
 
     is_demo = any((settings.tracking_mock, settings.vlm_mock, settings.rag_mock, settings.reasoning_mock))
-    if not claim_analysis(str(settings.db_path), accident_id, is_demo):
+    if not claim_analysis(str(settings.db_path), accident_id, is_demo, video_vlm_api=video_vlm_api):
         raise HTTPException(409, "Analysis already in progress.")
     # A replacement upload may have completed between the first read and claim.
     # Once claimed, replacement/deletion are blocked until the job finishes.

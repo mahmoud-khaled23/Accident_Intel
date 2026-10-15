@@ -9,15 +9,6 @@ real mode the function calls
 :func:`reasoning.reasoning_accident.analyze_accident` and validates the
 response against :class:`~schemas.accident.ReasoningReport`.
 """
-import sys
-from pathlib import Path
-
-_project_root = str(Path(__file__).parents[3])
-_src_path = str(Path(__file__).parents[3] / "src")
-for _p in (_project_root, _src_path):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 _MOCK_REPORT = {
     "overall_assessment": (
         "Based on the video analysis and tracking data, Vehicle 1 appears to have failed to "
@@ -96,7 +87,7 @@ def analyze_accident(
     if settings.reasoning_mock:
         return _MOCK_REPORT
 
-    from reasoning.reasoning_accident import analyze_accident as run_reasoning
+    from src.reasoning.reasoning_accident import analyze_accident as run_reasoning
 
     from ..schemas.accident import ReasoningReport
     from .tracking_service import summarize_tracking
@@ -114,6 +105,15 @@ def analyze_accident(
         report = ReasoningReport.model_validate(raw)
         if not report.overall_assessment.strip():
             raise ValueError("Reasoning returned an empty assessment.")
+        def section_id(value):
+            return str(value).strip().upper().removeprefix("VTL-").removeprefix("§").strip()
+        known_sections = {section_id(law.get("section_id", law.get("id", ""))) for law in laws}
+        for violation in report.violations:
+            if not violation.law_section or section_id(violation.law_section) not in known_sections:
+                raise ValueError(f"Reasoning cited an unretrieved law: {violation.law_section!r}.")
+        known_vehicles = {str(track["id"]) for track in tracking_data.get("trajectories", [])}
+        if any(str(vehicle.id) not in known_vehicles for vehicle in report.vehicles):
+            raise ValueError("Reasoning attributed responsibility to an unknown track ID.")
         return report.model_dump()
     except RuntimeError:
         raise

@@ -36,6 +36,8 @@ def sample_frames(video_path: str, n_frames: int):
         >>> len(frames)
         8
     """
+    if n_frames < 1:
+        raise ValueError("n_frames must be at least 1")
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -43,6 +45,7 @@ def sample_frames(video_path: str, n_frames: int):
         cap.release()
         raise ValueError("Could not read video.")
 
+    n_frames = min(n_frames, total)
     if n_frames == 1:
         indices = [0]
     else:

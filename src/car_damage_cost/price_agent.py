@@ -18,7 +18,7 @@ import re
 import time
 from pathlib import Path
 
-from schemas import CarInfo
+from .schemas import CarInfo
 
 CACHE_TTL_DAYS = 30
 """Number of days before a cached price entry is considered stale and re-fetched."""
@@ -94,7 +94,7 @@ class PriceAgent:
             cache_path: Path to the on-disk JSON cache. Created automatically
                 if it does not exist.
         """
-        from google import genai            # pip install google-genai
+        from google import genai            # installed by uv sync
 
         self.client = genai.Client(api_key=api_key)   # keep the reference!
         self.model = model
@@ -200,7 +200,7 @@ class PriceAgent:
             except ImportError:
                 from duckduckgo_search import DDGS
         except ImportError:
-            print("[price_agent] search library missing: pip install ddgs")
+            print("[price_agent] search library missing: run uv sync --locked")
             return []
         try:
             return list(DDGS().text(query, max_results=MAX_RESULTS_PER_QUERY)) or []

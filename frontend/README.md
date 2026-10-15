@@ -15,7 +15,7 @@ A React + TypeScript single-page application for AI-assisted traffic accident an
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -29,7 +29,7 @@ The development server runs at **http://localhost:5173** with hot module reloadi
 npm run build
 ```
 
-Output is written to `dist/`. For deployment, route `/api` to the backend or set `VITE_API_BASE_URL` before building.
+Output is written to `dist/`. `npm run preview` proxies `/api` to the backend like development. For deployment, route `/api` to the backend or set `VITE_API_BASE_URL` before building.
 
 ---
 
@@ -50,7 +50,7 @@ cp .env.example .env.local
 
 ## Mock / Demo Mode
 
-When `VITE_USE_MOCK=true` (explicit demo mode), all data comes from local mock files under `src/mocks/`. No network requests are made. Every page shows a **Demo Data** badge. To connect to the real FastAPI backend:
+When `VITE_USE_MOCK=true` (explicit demo mode), all data comes from local mock files under `src/mocks/`. Reports are marked as demo data and video upload is blocked. Pipeline settings still inspects server health. To connect to the real FastAPI backend:
 
 1. Set `VITE_USE_MOCK=false` in `.env.local`
 2. Leave `VITE_API_BASE_URL` empty for the Vite proxy, including Lightning Studio. Set a public backend URL only for a separate deployment.
@@ -63,12 +63,12 @@ When `VITE_USE_MOCK=true` (explicit demo mode), all data comes from local mock f
 | Path              | Page                   | Description                                  |
 |-------------------|------------------------|----------------------------------------------|
 | `/dashboard`      | DashboardPage          | Overview stats, recent analyses, quick links |
-| `/analysis/new`   | NewAnalysisPage        | 6-step analysis workflow (upload → report)   |
+| `/analysis/new`   | NewAnalysisPage        | Real upload → tracking → vision → RAG → reasoning   |
 | `/analysis/:id`   | AnalysisDetailsPage    | Tabbed report for a specific accident        |
 | `/history`        | AnalysisHistoryPage    | Searchable, filterable analysis history      |
 | `/damage`         | DamageEstimatorPage    | 5-step vehicle damage + repair cost estimator|
 | `/laws`           | TrafficLawsPage        | Searchable NYC traffic law reference library |
-| `/settings`       | SettingsPage           | User preferences stored in localStorage      |
+| `/settings`       | SettingsPage           | Live pipeline configuration + VLM preference      |
 | `/*`              | NotFoundPage           | 404 catch-all                                |
 
 ---
@@ -135,3 +135,5 @@ Upload a video and optional incident details on `/analysis/new`. After the uploa
 model pipeline, the app opens `/analysis/:id`. This saved page follows live status, shows partial
 results, and supports retries. History restores the same video and results after refresh.
 The Tracking tab plays the uploaded video and draws model detections at its actual timestamps.
+
+The model selector offers Auto (CUDA or API), Local GPU, and API. The chosen mode is persisted with each upload and may be changed on retry. Keys remain on the server; the settings page exposes only configuration status.

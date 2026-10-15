@@ -6,16 +6,7 @@ Provides two public functions used by the accidents pipeline:
 * :func:`summarize_tracking` — compress tracking data to a size safe to
   pass to an LLM context window.
 """
-import sys
 from pathlib import Path
-
-# Ensure project root and src/ are on sys.path
-_project_root = str(Path(__file__).parents[3])   # Accident_Intel/
-_src_path = str(Path(__file__).parents[3] / "src")
-for _p in (_project_root, _src_path):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 
 def run_tracking(
     video_path: str,
@@ -88,7 +79,7 @@ def run_tracking(
 
     # Real mode — lazy import to avoid loading heavy deps at startup
     try:
-        from vehicle_tracking.tracker import process_video
+        from src.vehicle_tracking.tracker import process_video
     except ImportError as exc:
         raise RuntimeError(
             f"vehicle_tracking package not importable — is ultralytics installed? Original error: {exc}"
@@ -99,7 +90,7 @@ def run_tracking(
     output_video = str(out_dir / f"{accident_id}_tracked.mp4")
     output_json = str(out_dir / f"{accident_id}_trajectories.json")
 
-    from vehicle_tracking.accident_candidates import identify_accident_candidates
+    from src.vehicle_tracking.accident_candidates import identify_accident_candidates
 
     from .video_service import inspect_video
     metadata = inspect_video(video_path)

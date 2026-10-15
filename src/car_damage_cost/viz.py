@@ -13,7 +13,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from schemas import UNKNOWN_PART, Detection
+from .schemas import UNKNOWN_PART, Detection
 
 # BGR, bright and distinct from the pastel part colours
 DAMAGE_COLORS = {

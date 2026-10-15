@@ -46,6 +46,10 @@ def run_analysis_pipeline(accident_id: str, video_path: str, db_path: str, setti
             record = get_accident(db_path, accident_id)
             if record is None:
                 return
+            # Each upload owns its choice; never mutate the shared Settings singleton.
+            settings = settings.model_copy(update={
+                "video_vlm_api": record.get("video_vlm_api") or settings.video_vlm_api,
+            })
             out_dir = settings.data_dir / "accidents" / accident_id
             out_dir.mkdir(parents=True, exist_ok=True)
             update_accident(db_path, accident_id, {"status": stage, "error": None})
@@ -56,7 +60,7 @@ def run_analysis_pipeline(accident_id: str, video_path: str, db_path: str, setti
             update_accident(db_path, accident_id, {"tracking_data": tracking})
 
             stage = "vlm_analysis"
-            update_accident(db_path, accident_id, {"status": stage})
+            update_accident(db_path, accident_id, {"status": stage, "video_vlm": vlm_service.backend_info(settings)})
             description = vlm_service.analyze_video(video_path, accident_id, settings, tracking)
             if not description.strip():
                 raise RuntimeError("The visual model returned an empty description.")

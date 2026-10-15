@@ -11,6 +11,7 @@ import type {
   Evidence,
 } from '../types/accident';
 import type { TrafficLaw } from '../types/law';
+import type { VideoBackend, VideoModelInfo } from '../types/pipeline';
 import type { PaginatedResponse, AnalysisStatus } from '../types/common';
 import {
   MOCK_ACCIDENTS,
@@ -93,6 +94,8 @@ interface BackendAccidentRecord {
   failed_stage?: string | null;
   is_demo_data?: boolean;
   video_metadata?: AccidentRecord['videoMetadata'];
+  video_vlm_api?: VideoBackend;
+  video_vlm?: VideoModelInfo | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +145,7 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
       }
 
       return {
-        timestamp: parseFloat(ts.toFixed(2)),
+        timestamp: ts,
         vehicleId,
         bbox,
         confidence: f.confidence ?? 0,
@@ -180,7 +183,7 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
 }
 
 function mapVLMDescription(text: string | null | undefined): VLMAnalysis {
-  // src/VLM returns prose, not a structured timeline. Keep every section intact
+  // Video understanding returns prose. Keep every section intact
   // (including incident evidence and limitations); don't label prose as facts
   // or infer timestamps that the model did not provide as structured data.
   return {
@@ -275,6 +278,8 @@ function mapBackendRecord(raw: BackendAccidentRecord): AccidentRecord {
     error: raw.error || undefined,
     failedStage: raw.failed_stage || undefined,
     videoMetadata: raw.video_metadata,
+    videoBackend: raw.video_vlm_api ?? 'auto',
+    videoModel: raw.video_vlm ?? undefined,
   };
 }
 
@@ -358,6 +363,7 @@ export async function uploadVideo(
     incidentDate?: string;
     description?: string;
     notes?: string;
+    videoBackend?: VideoBackend;
   },
 ): Promise<AccidentRecord> {
   if (isMockMode) {
@@ -383,6 +389,7 @@ export async function uploadVideo(
   if (metadata.incidentDate) formData.append('incident_date', metadata.incidentDate);
   if (metadata.description) formData.append('description', metadata.description);
   if (metadata.notes) formData.append('notes', metadata.notes);
+  if (metadata.videoBackend) formData.append('video_vlm_api', metadata.videoBackend);
   const raw = await postForm<BackendAccidentRecord>('/api/accidents/upload', formData);
   // Attach the original filename since the server stores it internally
   raw.video_filename = raw.video_filename ?? file.name;
@@ -390,12 +397,13 @@ export async function uploadVideo(
 }
 
 /** Trigger the analysis pipeline for an already-uploaded accident */
-export async function triggerAnalysis(id: string): Promise<{ status: string; message: string }> {
+export async function triggerAnalysis(id: string, videoBackend?: VideoBackend): Promise<{ status: string; message: string }> {
   if (isMockMode) {
     await mockDelay(300);
     return { status: 'processing', message: 'Mock analysis started' };
   }
-  return post<{ status: string; message: string }>(`/api/accidents/${id}/analyze`);
+  const query = videoBackend ? `?video_vlm_api=${encodeURIComponent(videoBackend)}` : '';
+  return post<{ status: string; message: string }>(`/api/accidents/${id}/analyze${query}`);
 }
 
 /** Poll current pipeline status for an accident */

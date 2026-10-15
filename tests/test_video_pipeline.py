@@ -46,6 +46,8 @@ def test_format_size_and_pagination_validation(test_client, monkeypatch):
 
 @pytest.mark.parametrize('backend', ['local', 'openai'])
 def test_real_adapters_pass_video_tracking_and_context_through_models(test_client, video_bytes, monkeypatch, backend):
+    from src.video_understanding import backend as selection
+    monkeypatch.setattr(selection, 'cuda_available', lambda: backend == 'local')
     settings = get_settings()
     for name in ('tracking', 'vlm', 'rag', 'reasoning'):
         monkeypatch.setattr(settings, f'{name}_mock', False)
@@ -56,7 +58,7 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
     monkeypatch.setattr(settings, 'vlm_n_frames', 3)
     seen = {}
     stages = []
-    from vehicle_tracking import tracker
+    from src.vehicle_tracking import tracker
 
     def process_video(video_path, output_video, output_json, model_path):
         assert Path(video_path).read_bytes() == video_bytes
@@ -73,8 +75,8 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
     if backend == 'local':
         import torch
         from transformers import BatchEncoding
-        from src.VLM import analyze_video as local_vlm
-        from src.VLM.prompts import SYSTEM_PROMPT
+        from src.video_understanding import analyze_video as local_vlm
+        from src.video_understanding.prompts import SYSTEM_PROMPT
         from src.api.services import vlm_service
 
         class Processor:
@@ -120,7 +122,7 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
         seen['rag'] = kwargs
         stages.append('rag')
         return laws
-    monkeypatch.setitem(sys.modules, 'rag.retrieval.report_retrieval', SimpleNamespace(retrieve_for_report=retrieve_for_report))
+    monkeypatch.setitem(sys.modules, 'src.rag.retrieval.report_retrieval', SimpleNamespace(retrieve_for_report=retrieve_for_report))
 
     class ModelClient:
         def __init__(self, **kwargs):
@@ -171,16 +173,19 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
 def test_video_backend_is_independent_of_shared_vlm_api(monkeypatch):
     from src.api.config import Settings
     from src.api.services.vlm_service import backend_info
+    from src.video_understanding import backend
+    monkeypatch.setattr(backend, 'cuda_available', lambda: True)
 
     monkeypatch.delenv('VIDEO_VLM_API', raising=False)
     monkeypatch.setenv('VLM_API', 'openai')
     monkeypatch.setenv('VLM_MOCK', 'false')
     monkeypatch.setenv('VLM_MODEL_ID', 'Qwen/Qwen2-VL-7B-Instruct')
-    assert backend_info(Settings(_env_file=None)) == {
-        'backend': 'local', 'model': 'Qwen/Qwen2-VL-7B-Instruct', 'module': 'src.VLM.analyze_video',
-    }
+    info = backend_info(Settings(_env_file=None))
+    assert info['backend'] == 'local'
+    assert info['requested'] == 'auto'
+    assert info['module'] == 'src.video_understanding.analyze_video'
     monkeypatch.setenv('VIDEO_VLM_API', 'openai')
-    assert backend_info(Settings(_env_file=None))['module'] == 'src.VLM.hosted'
+    assert backend_info(Settings(_env_file=None))['module'] == 'src.video_understanding.hosted'
 
 
 def test_health_identifies_selected_video_model(test_client, monkeypatch):
@@ -188,12 +193,14 @@ def test_health_identifies_selected_video_model(test_client, monkeypatch):
     monkeypatch.setattr(settings, 'vlm_mock', False)
     monkeypatch.setattr(settings, 'video_vlm_api', 'local')
     info = test_client.get('/api/health').json()['video_vlm']
-    assert info == {'backend': 'local', 'model': settings.vlm_model_id, 'module': 'src.VLM.analyze_video'}
+    assert info['backend'] == 'local'
+    assert info['model'] == settings.vlm_model_id
+    assert info['module'] == 'src.video_understanding.analyze_video'
 
 
 def test_local_vlm_uses_own_prompts_despite_bare_import_collisions(monkeypatch):
     import importlib
-    from src.VLM import analyze_video, prompts
+    from src.video_understanding import analyze_video, prompts
 
     monkeypatch.setitem(sys.modules, 'prompts', SimpleNamespace(
         SYSTEM_PROMPT='unrelated', TRAFFIC_ANALYSIS_PROMPT='unrelated', build_accident_prompt=None,

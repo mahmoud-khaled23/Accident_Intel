@@ -30,6 +30,9 @@ import { apiUrl } from '@/services/apiClient';
 import { exportElementToPDF } from '@/utils/pdfExport';
 import type { AccidentRecord } from '@/types/accident';
 import type { TrafficLaw } from '@/types/law';
+import type { VideoBackend } from '@/types/pipeline';
+import { usePipelineHealth } from '@/hooks/usePipelineHealth';
+import { VideoBackendSelect } from '@/components/analysis/VideoBackendSelect';
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
@@ -37,6 +40,9 @@ export function AnalysisDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const reportRef = useRef<HTMLDivElement>(null);
+  const loadVersion = useRef(0);
+  const { health } = usePipelineHealth();
+  const [retryBackend, setRetryBackend] = useState<VideoBackend | null>(null);
 
   // Data state
   const [record, setRecord] = useState<AccidentRecord | null>(null);
@@ -59,6 +65,7 @@ export function AnalysisDetailsPage() {
 
   const loadData = useCallback(async (quiet = false) => {
     if (!id) return;
+    const version = ++loadVersion.current;
     if (!quiet) setLoading(true);
     setError(null);
     try {
@@ -66,18 +73,22 @@ export function AnalysisDetailsPage() {
         getAccident(id),
         getRetrievedLaws(id),
       ]);
+      if (version !== loadVersion.current) return;
       setRecord(rec);
       setLaws(retrievedLaws);
     } catch (err) {
+      if (version !== loadVersion.current) return;
       const msg = err instanceof Error ? err.message : 'Failed to load analysis.';
       setError(msg.includes('not found') ? 'Analysis not found.' : msg);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    setRetryBackend(null);
     void loadData();
+    return () => { loadVersion.current += 1; };
   }, [loadData]);
 
   useEffect(() => {
@@ -105,7 +116,7 @@ export function AnalysisDetailsPage() {
     setStarting(true);
     setActionError(null);
     try {
-      await triggerAnalysis(id);
+      await triggerAnalysis(id, retryBackend ?? record?.videoBackend);
       await loadData(true);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not start analysis.');
@@ -186,6 +197,7 @@ export function AnalysisDetailsPage() {
 
       <div className="rounded-lg border border-[#1e2d45] p-4 space-y-3" aria-live="polite">
         <StatusBadge status={record.status} />
+        {record.videoModel && <p className="text-xs text-slate-400">Video model: {record.videoModel.backend} · {record.videoModel.model ?? 'Demo'}</p>}
         {!['created', 'uploaded', 'completed', 'failed'].includes(record.status) && (
           <p className="text-sm text-slate-300">{record.status === 'processing' ? 'Queued for analysis.' : 'Analysis is running.'} Results appear as each stage finishes. You can return here from History.</p>
         )}
@@ -193,7 +205,10 @@ export function AnalysisDetailsPage() {
         {connectionError && <p className="text-sm text-amber-300">Connection interrupted: {connectionError}. Retrying…</p>}
         {actionError && <p role="alert" className="text-sm text-red-300">{actionError}</p>}
         {(record.status === 'uploaded' || record.status === 'failed') && (
-          <Button disabled={starting} onClick={() => void retryAnalysis()}>{starting ? 'Starting…' : record.status === 'failed' ? 'Retry analysis' : 'Start analysis'}</Button>
+          <div className="space-y-3 max-w-xl">
+            <VideoBackendSelect value={retryBackend ?? record.videoBackend ?? 'auto'} onChange={setRetryBackend} health={health} disabled={starting} />
+            <Button disabled={starting} onClick={() => void retryAnalysis()}>{starting ? 'Starting…' : record.status === 'failed' ? 'Retry analysis' : 'Start analysis'}</Button>
+          </div>
         )}
         <ol className="flex flex-wrap gap-3 text-xs text-slate-400">
           {['tracking', 'vlm_analysis', 'law_retrieval', 'reasoning'].map((stage) => <li key={stage} className={stage === record.status ? 'text-primary font-semibold' : ''}>{stage.replace('_', ' ')}</li>)}

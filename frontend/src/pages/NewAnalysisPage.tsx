@@ -11,9 +11,15 @@ import { VideoUploader } from '@/components/upload/VideoUploader';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { uploadVideo, triggerAnalysis } from '@/services/accidentService';
 import { isMockMode } from '@/services/apiClient';
+import { usePipelineHealth } from '@/hooks/usePipelineHealth';
+import { VideoBackendSelect } from '@/components/analysis/VideoBackendSelect';
+import { getSettings } from '@/services/settingsService';
+import type { VideoBackend } from '@/types/pipeline';
 
 export function NewAnalysisPage() {
   const navigate = useNavigate();
+  const { health, error: healthError } = usePipelineHealth();
+  const [videoBackend, setVideoBackend] = useState<VideoBackend>(() => getSettings().videoBackend);
   const [file, setFile] = useState<File | null>(null);
   const [metadata, setMetadata] = useState({ location: '', incidentDate: '', description: '', notes: '' });
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'starting'>('idle');
@@ -25,8 +31,8 @@ export function NewAnalysisPage() {
     if (!file || busy) return;
     setError(null);
     // Demo mode is explicit and never pretends to analyze an uploaded file.
-    if (isMockMode) {
-      setError('Demo mode is enabled. Set VITE_USE_MOCK=false to analyze your video.');
+    if (isMockMode || (health && Object.values(health.pipeline).includes('demo'))) {
+      setError('Demo mode is enabled. Disable VITE_USE_MOCK and all server pipeline mock flags to analyze your video.');
       return;
     }
     try {
@@ -35,13 +41,14 @@ export function NewAnalysisPage() {
         setPhase('uploading');
         const record = await uploadVideo(file, {
           ...metadata,
+          videoBackend,
           incidentDate: metadata.incidentDate ? new Date(metadata.incidentDate).toISOString() : undefined,
         });
         id = record.id;
         setSavedId(id);
       }
       setPhase('starting');
-      await triggerAnalysis(id);
+      await triggerAnalysis(id, videoBackend);
       navigate(`/analysis/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start analysis.');
@@ -54,7 +61,7 @@ export function NewAnalysisPage() {
     <div className="space-y-6 max-w-4xl">
       <PageHeader title="New Video Analysis" description="Upload a video to track vehicles, analyze visible events, retrieve traffic laws, and generate a report." />
       <fieldset disabled={busy || Boolean(savedId)} className="space-y-6 disabled:opacity-70">
-        <VideoUploader file={file} onFileSelect={(value) => { setFile(value); setError(null); }} onRemove={() => setFile(null)} />
+        <VideoUploader file={file} disabled={busy || Boolean(savedId)} maxUploadMB={health?.max_upload_mb ?? 500} onFileSelect={(value) => { setFile(value); setError(null); }} onRemove={() => setFile(null)} />
         {file && <VideoPreview file={file} />}
         <Card>
           <CardHeader><CardTitle>Incident details (optional)</CardTitle></CardHeader>
@@ -68,6 +75,8 @@ export function NewAnalysisPage() {
           </CardContent>
         </Card>
       </fieldset>
+      <Card><CardContent className="pt-6"><VideoBackendSelect value={videoBackend} onChange={setVideoBackend} health={health} disabled={busy} /></CardContent></Card>
+      {healthError && <p role="alert" className="text-sm text-amber-300">{healthError}</p>}
       {error && <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
       <div className="flex flex-wrap items-center gap-4">
         <Button size="lg" disabled={!file || busy} onClick={() => void start()}>

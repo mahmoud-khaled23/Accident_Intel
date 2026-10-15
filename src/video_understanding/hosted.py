@@ -20,6 +20,8 @@ def analyze_hosted(
 ) -> str:
     """Sample frames, group them into timestamped contact sheets, and call a vision chat model."""
     import openai
+    if max_images < 1 or n_frames < 1 or max_tokens < 1:
+        raise ValueError("Frame, image, and token limits must be positive.")
 
     if __package__:
         from .contact_sheet import make_sheet, sample_frames

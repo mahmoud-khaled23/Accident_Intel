@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from schemas import (
+from .schemas import (
     SEVERITY_RANK,
     UNKNOWN_PART,
     FusedDamage,

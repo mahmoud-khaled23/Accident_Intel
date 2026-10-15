@@ -172,7 +172,7 @@ ACTIVE_STATUSES = {"processing", "tracking", "vlm_analysis", "law_retrieval", "r
 """Status values that indicate a background analysis job is currently running."""
 
 
-def claim_analysis(db_path: str, accident_id: str, is_demo: bool) -> bool:
+def claim_analysis(db_path: str, accident_id: str, is_demo: bool, *, video_vlm_api: str | None = None) -> bool:
     """Atomically reserve a job for analysis and clear any stale previous results.
 
     Uses ``BEGIN IMMEDIATE`` to avoid a race where two callers simultaneously
@@ -197,7 +197,9 @@ def claim_analysis(db_path: str, accident_id: str, is_demo: bool) -> bool:
         data = json.loads(row["data"])
         data.update(status="processing", error=None, failed_stage=None,
                     tracking_data=None, vlm_description=None, laws=None, report=None,
-                    is_demo_data=is_demo)
+                    is_demo_data=is_demo, video_vlm=None)
+        if video_vlm_api is not None:
+            data["video_vlm_api"] = video_vlm_api
         conn.execute("UPDATE accidents SET status = ?, data = ? WHERE id = ?",
                      ("processing", json.dumps(data), accident_id))
         conn.commit()

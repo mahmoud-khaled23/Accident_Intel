@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from schemas import Detection, Severity
+from .schemas import Detection, Severity
 
 # Some damage types only make sense on certain parts. If a compatible part
 # overlaps enough, prefer it over a (slightly) larger incompatible overlap

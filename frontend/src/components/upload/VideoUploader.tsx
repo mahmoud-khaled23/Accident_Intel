@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 
 const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const ACCEPTED_EXTENSIONS = '.mp4, .mov, .webm';
-const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -17,9 +16,11 @@ interface VideoUploaderProps {
   file: File | null;
   onFileSelect: (file: File) => void;
   onRemove: () => void;
+  maxUploadMB?: number;
+  disabled?: boolean;
 }
 
-export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderProps) {
+export function VideoUploader({ file, onFileSelect, onRemove, maxUploadMB = 500, disabled = false }: VideoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +30,14 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
       return `Unsupported format "${f.type || f.name}". Please upload MP4, MOV, or WebM.`;
     }
     if (f.size === 0) return 'The selected video is empty.';
-    if (f.size > MAX_BYTES) {
-      return `File is too large (${formatBytes(f.size)}). Maximum allowed size is 500 MB.`;
+    if (f.size > maxUploadMB * 1024 * 1024) {
+      return `File is too large (${formatBytes(f.size)}). Maximum allowed size is ${maxUploadMB} MB.`;
     }
     return null;
   }
 
   function handleFile(f: File) {
+    if (disabled) return;
     const err = validate(f);
     if (err) {
       setError(err);
@@ -87,6 +89,7 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
             onRemove();
           }}
           aria-label="Remove video"
+          disabled={disabled}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -98,10 +101,11 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
     <div className="space-y-2">
       <div
         role="button"
-        tabIndex={0}
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
         aria-label="Upload video — click or drag and drop"
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
+        onClick={() => !disabled && inputRef.current?.click()}
+        onKeyDown={(e) => !disabled && e.key === 'Enter' && inputRef.current?.click()}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
@@ -118,6 +122,7 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
           accept={ACCEPTED_EXTENSIONS}
           className="hidden"
           onChange={onInputChange}
+          disabled={disabled}
         />
         <UploadCloud className="mx-auto h-10 w-10 text-slate-500 mb-3" />
         <p className="text-sm font-medium text-slate-200">
@@ -125,7 +130,7 @@ export function VideoUploader({ file, onFileSelect, onRemove }: VideoUploaderPro
           <span className="text-primary underline">click to browse</span>
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Supported formats: MP4, MOV, WebM — max 500 MB
+          Supported formats: MP4, MOV, WebM — max {maxUploadMB} MB
         </p>
       </div>
 

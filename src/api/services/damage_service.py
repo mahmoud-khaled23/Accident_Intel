@@ -3,22 +3,8 @@
 Provides a single public function :func:`run_damage_assessment` that runs the
 full car-damage detection and cost-estimation pipeline.
 
-``car_damage_cost`` uses bare-name imports (e.g. ``from config import Config``)
-so its own directory is inserted at the front of ``sys.path`` here.
+Imports are package-qualified to avoid collisions with API schemas.
 """
-import sys
-from pathlib import Path
-
-# Ensure project root, src/, and src/car_damage_cost/ are on sys.path.
-# car_damage_cost uses bare imports (e.g. `from config import Config`) so its
-# own directory MUST be on sys.path directly.
-_project_root = str(Path(__file__).parents[3])
-_src_path = str(Path(__file__).parents[3] / "src")
-_car_damage_path = str(Path(__file__).parents[3] / "src" / "car_damage_cost")
-for _p in (_project_root, _src_path, _car_damage_path):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 
 def run_damage_assessment(
     image_paths: list[str],
@@ -34,8 +20,7 @@ def run_damage_assessment(
     2. Runs :func:`car_damage_cost.pipeline.analyze_case` over all images.
     3. Calls :func:`car_damage_cost.cost_engine.estimate_cost` to produce a
        cost breakdown.
-    4. Falls back to a placeholder response if inference fails, logging a
-       warning rather than raising.
+    4. Propagates inference failures without fabricating estimates.
 
     Args:
         image_paths: List of absolute paths to the uploaded damage images.
@@ -93,8 +78,8 @@ def run_damage_assessment(
 
     # Real mode — import heavy modules inside the function
     try:
-        from pipeline import analyze_case  # noqa: F401
-        from config import Config          # noqa: F401
+        from src.car_damage_cost.pipeline import analyze_case  # noqa: F401
+        from src.car_damage_cost.config import Config          # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
             f"car_damage_cost package not importable — are YOLO weights present? "
@@ -102,9 +87,9 @@ def run_damage_assessment(
         ) from exc
 
     try:
-        from schemas import CarInfo
-        from cost_engine import estimate_cost, load_tables
-        from yolo_wrapper import YoloSegWrapper
+        from src.car_damage_cost.schemas import CarInfo
+        from src.car_damage_cost.cost_engine import estimate_cost, load_tables
+        from src.car_damage_cost.yolo_wrapper import YoloSegWrapper
     except ImportError as exc:
         raise RuntimeError(
             f"car_damage_cost sub-modules not importable. Original error: {exc}"
@@ -141,32 +126,7 @@ def run_damage_assessment(
 
         warnings = report.warnings
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Real damage analysis failed (%s) — using fallback", exc)
-        cost_dict = {
-            "total_min": 3500.0,
-            "total_max": 6000.0,
-            "lines": [
-                {
-                    "part": "front_bumper",
-                    "action": "replace",
-                    "damages": ["damage detected"],
-                    "total_min": 2000.0,
-                    "total_max": 3500.0,
-                    "needs_review": False,
-                },
-                {
-                    "part": "hood",
-                    "action": "repair_and_paint",
-                    "damages": ["minor dent"],
-                    "total_min": 1500.0,
-                    "total_max": 2500.0,
-                    "needs_review": False,
-                },
-            ],
-            "unpriced": [],
-        }
-        warnings = [f"Inference fallback: {exc}"]
+        raise RuntimeError(f"Damage analysis failed: {exc}") from exc
 
     return {
         "car_info": {

@@ -12,7 +12,7 @@ Accident Intel is a Python project for turning accident video and vehicle photos
 - Detects and tracks vehicles with YOLO and BoT-SORT, saving trajectories and an annotated video.
 - Retrieves relevant New York Vehicle and Traffic Law (VTL) passages with hybrid dense/BM25 search.
 - Extracts structured accident facts and generates an evidence- and citation-grounded liability analysis.
-- Analyzes photos of vehicle damage and creates an editable repair-cost estimate in EGP through a Streamlit UI.
+- Analyzes vehicle-damage photos and creates a repair-cost estimate in EGP through the React UI.
 - Includes utilities for VLM benchmarking and RAG evaluation.
 
 ## Architecture
@@ -20,7 +20,7 @@ Accident Intel is a Python project for turning accident video and vehicle photos
 ```mermaid
 flowchart TD
     A["Upload Accident Video"] --> B["Video Tracking"]
-    B --> C["Tracking Results<br/>Vehicle IDs, Bounding Boxes,<br/>Trajectories, Speeds"]
+    B --> C["Tracking Results<br/>Vehicle IDs, Bounding Boxes,<br/>Trajectories, Image-space Motion"]
     A --> D["Original Video"]
     C --> E["Vision-Language Model (VLM)"]
     D --> E
@@ -49,37 +49,52 @@ The React UI and FastAPI backend connect uploads to tracking, visual analysis, l
 React uploads the actual video to FastAPI; the Python models run on the backend:
 
 1. Save the uploaded video and run the existing vehicle-tracking preprocessing.
-2. Pass that same video and its tracking observations to `src/VLM/analyze_video.py` (local Qwen2-VL).
+2. Pass that same video and its tracking observations to `src/video_understanding`: local Qwen2-VL on a CUDA GPU, or timestamped sampled frames through a hosted vision API.
 3. Send the VLM description to `src/rag/retrieval/report_retrieval.py` to retrieve law passages.
 4. Send the description, retrieved passages, tracking context, and optional user notes to `src/reasoning/reasoning_accident.py`.
 5. Save the structured report and display it, together with the full VLM description, in React.
 
-Repair-cost analysis remains a separate, unchanged branch.
+Repair-cost analysis remains a separate branch; model failures are surfaced without substituting sample estimates.
 
 ## Repository layout
 
 ```text
+frontend/src/
+├── app/                 # React entry and routes
+├── pages/               # Upload, history, reports, laws, damage, settings
+├── components/          # Upload controls, tracking player, stage results
+├── hooks/               # API health and analysis state
+├── services/            # Typed API clients and response mapping
+└── types/               # Video, pipeline, tracking, law and report contracts
 src/
-├── VLM/                 # Qwen2-VL video analysis, prompts, frame contact sheets
-├── vehicle_tracking/    # YOLO11x + BoT-SORT detection and trajectories
-├── rag/
-│   ├── chunking/        # Traffic-law chunking and query expansion
-│   └── retrieval/       # Chroma/BM25 retrieval and accident-law analysis
-├── reasoning/           # LLM reasoning experiments
-└── Car_damage_cost/     # Damage segmentation, review UI, and cost estimation
-evaluation/
-└── rag_evaluation/      # RAGAS test set and evaluation script
-out/                     # Generated law chunks/index metadata
-vtl_db/                  # Local Chroma vector database
+├── api/                 # FastAPI routes, persistent jobs, model adapters
+├── vehicle_tracking/    # YOLO11x + BoT-SORT and candidate heuristics
+├── video_understanding/ # GPU Qwen2-VL / hosted API and frame sampling
+├── rag/                 # Chunking, hybrid retrieval, report queries
+├── reasoning/           # Evidence-grounded structured reasoning
+├── car_damage_cost/     # Damage segmentation and repair estimates
+└── accident_intel/      # API command-line entry point
+data/
+├── traffic_laws/raw/    # Provisioned law source files (not committed)
+├── traffic_laws/chunks/ # parents.json, children.jsonl, Chroma index
+└── accidents/          # Uploaded videos and tracking artifacts
+weights/
+├── vehicle_tracking/   # yolo11x.pt
+└── car_damage_cost/    # damage_segmentation.pt, parts_segmentation.pt
+evaluation/rag_evaluation/
+tests/
 ```
+
+Python imports use `src.<package>` consistently. Run CLI modules from the repository root with `uv run python -m ...`; avoid changing into module folders. Relative configuration paths resolve against the repository root. SQLite defaults to `DATA_DIR/accident_intel.db`.
+
 
 ## Getting started
 
 ### Prerequisites
 
 - Python 3.13+ (as declared in `pyproject.toml`)
-- A CUDA-capable GPU is strongly recommended for local Qwen2-VL and YOLO inference.
-- API keys for a hosted VLM/reasoning provider, or sufficient GPU memory for local Qwen2-VL.
+- A CUDA-capable GPU is required for local Qwen2-VL; hosted vision and YOLO tracking can run on a CPU server.
+- A reasoning API key in both modes; a vision API key for hosted video understanding, or sufficient GPU memory for local Qwen2-VL.
 
 Install the locked runtime dependencies with `uv`:
 
@@ -91,48 +106,55 @@ The first real run may also download model weights (YOLO, embeddings, a reranker
 
 ### Run the real upload-to-report application
 
-The React application is connected to the real API by default; mock data is only used when explicitly enabled. Configure the video-analysis pipeline first:
+Create `.env` from `.env.example` for a new installation. If you already have `.env`, update its video settings and moved paths while preserving your keys. All mock flags default to `false`.
 
 ```dotenv
-TRACKING_MOCK=false
-VLM_MOCK=false
-RAG_MOCK=false
-REASONING_MOCK=false
-
-# Choose exactly one VLM option.
-# Local Qwen2-VL from src/VLM/analyze_video.py (default):
-VIDEO_VLM_API=local
+VIDEO_VLM_API=auto
 VLM_MODEL_ID=Qwen/Qwen2-VL-7B-Instruct
-# Hosted OpenAI-compatible VLM:
-# VIDEO_VLM_API=openai
-# VLM_BASE_URL=https://your-provider.example/v1
-# VLM_MODEL=your-vision-capable-model
-# VLM_API_KEY=your_provider_key
+
+# Used on CPU, or when API is selected in React:
+VIDEO_VLM_BASE_URL=https://your-provider.example/v1
+VIDEO_VLM_MODEL=your-vision-capable-model
+VIDEO_VLM_API_KEY=your_provider_key
 
 OPENAI_API_KEY=your_reasoning_key
-OPENAI_BASE_URL=https://your-provider.example/v1
+OPENAI_BASE_URL=https://your-reasoning-provider.example/v1
 REASONING_MODEL=your_reasoning_model
-RAG_OUT_DIR=src/rag/chunking/out
+TRACKING_MODEL_PATH=weights/vehicle_tracking/yolo11x.pt
+RAG_OUT_DIR=data/traffic_laws/chunks
 ```
 
-The video pipeline uses `VIDEO_VLM_API`, not the shared `VLM_API` setting used by repair-cost analysis.
-Existing `VLM_API=openai` entries will therefore not redirect uploaded videos to a hosted model.
-To deliberately use hosted video analysis, set `VIDEO_VLM_API=openai` and its provider settings above.
-Do not replace your existing `.env` or repair-cost credentials; add only the video settings you need.
+The UI offers **Auto**, **Local GPU**, and **API** for every upload and retry:
 
-Then start the API and React development server in separate terminals:
+- **Auto** selects local Qwen2-VL when the server has a CUDA GPU, otherwise the hosted API.
+- **Local GPU** requires CUDA and enough memory for the selected model. Model errors are shown; they do not silently switch to an API.
+- **API** samples the actual uploaded video and sends timestamped contact sheets plus tracking context to an OpenAI-compatible vision model. Configure a model that accepts images.
+
+`VIDEO_VLM_*` provider settings take precedence over legacy `VLM_BASE_URL`, `VLM_MODEL`, and `VLM_API_KEY`. `VLM_API` belongs to repair-cost analysis and does not choose the video backend. Reasoning uses its own API credentials in all video modes. Tracking and retrieval can run on CPU.
+
+The law corpus must be provisioned separately. If you have raw law text under `data/traffic_laws/raw`, build chunks with:
 
 ```bash
-# Terminal 1 — FastAPI and the real model pipeline
-uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+uv run python -m src.rag.chunking.build_chunks --data data/traffic_laws/raw --out data/traffic_laws/chunks
+```
+
+Hybrid retrieval builds its dense index on first use and may download embedding/reranker models. For CPU keyword retrieval without these downloads, set `RAG_MODE=bm25` and `RAG_RERANK=false`. Missing corpus files produce an actionable error; no sample laws are substituted.
+
+Start the API and React development server in separate terminals:
+
+```bash
+uv sync --locked
+uv run accident-intel --host 0.0.0.0 --port 8000
+# Equivalent: uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
 ```bash
-# Terminal 2 — React
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
+
+Use one API worker: inference is serialized to protect GPU memory and model caches. Restarted jobs are marked failed and can be retried. Development `--reload` restarts also interrupt analyses.
 
 Keep `frontend/.env.local` in live mode:
 
@@ -141,9 +163,11 @@ VITE_USE_MOCK=false
 VITE_API_BASE_URL=
 ```
 
-Open `http://localhost:5173`, select **New Video Analysis**, upload a valid MP4, MOV, or WebM file, and choose **Upload and analyze**. The saved analysis page updates through tracking, VLM analysis, traffic-law retrieval, and reasoning. If a model stage fails, the page shows its actual error and never substitutes demo results.
+Open `http://localhost:5173`, choose **New Video Analysis**, upload MP4, MOV, or WebM, choose the video model, and select **Upload and analyze**. The report follows tracking → video understanding → RAG → reasoning and preserves partial results on failure. The Tracking tab plays the original upload with detections overlaid at source timestamps. H.264 MP4 and WebM offer the broadest browser playback compatibility; unsupported codecs show an error and download link.
 
-After restarting the backend, `http://localhost:8000/api/health` includes `video_vlm` with the selected backend, model, and Python module. For local video analysis, expect `backend: "local"`, `model: "Qwen/Qwen2-VL-7B-Instruct"`, and `module: "src.VLM.analyze_video"`. This reports configuration, not successful model loading. Existing reports are not recomputed automatically; upload a new video or rerun its analysis.
+**Pipeline settings** shows GPU availability, credential presence, corpus availability, and upload limits. `/api/health` exposes the same configuration without keys. These checks do not prove successful model loading or provider connectivity. Reports record the backend/model actually selected for each run; changing settings does not recompute old reports.
+
+Uploads and reports live on the backend, with no automatic retention cleanup. API video mode sends sampled frames to the chosen vision provider, and reasoning sends the description, tracking summary, retrieved passages, and optional notes to the reasoning provider.
 
 ## Run components directly
 
@@ -152,12 +176,11 @@ After restarting the backend, `http://localhost:8000/api/health` includes `video
 The VLM samples frames from a video and produces a conservative report. It uses `Qwen/Qwen2-VL-7B-Instruct` by default and downloads model assets on first use.
 
 ```bash
-cd src/VLM
-python analyze_video.py \
+uv run python -m src.video_understanding.analyze_video \
   --video /path/to/accident.mp4 \
   --prompt-mode json \
   --n-frames 32 \
-  --output ../../report.txt
+  --output report.txt
 ```
 
 Use `--prompt-mode report` for the longer narrative prompt, or pass `--prompt-file` to supply a custom prompt.
@@ -180,11 +203,11 @@ The tracker uses YOLO11x vehicle classes (car, motorcycle, bus, and truck) with 
 
 ### 3. Search the traffic-law index
 
-The hybrid retrieval path combines dense embeddings (`BAAI/bge-m3`) with BM25 and Reciprocal Rank Fusion. The prepared law corpus and Chroma index are stored under `src/rag/chunking/out/`.
+The hybrid retrieval path combines dense embeddings (`BAAI/bge-m3`) with BM25 and Reciprocal Rank Fusion. The prepared law corpus and Chroma index are stored under `data/traffic_laws/chunks/`.
 
 ```bash
 uv run python -m src.rag.retrieval.index_and_retrieve search \
-  --out src/rag/chunking/out \
+  --out data/traffic_laws/chunks \
   -q "failure to yield right of way" \
   -q "traffic-control signal red indication" \
   --top-k 5
@@ -193,7 +216,7 @@ uv run python -m src.rag.retrieval.index_and_retrieve search \
 To rebuild the Chroma index after changing chunks:
 
 ```bash
-uv run python -m src.rag.retrieval.index_and_retrieve index --out src/rag/chunking/out
+uv run python -m src.rag.retrieval.index_and_retrieve index --out data/traffic_laws/chunks
 ```
 
 ### 4. Produce a law-grounded accident analysis
@@ -202,9 +225,9 @@ Provide either a text description or a file. The script extracts neutral facts, 
 
 ```bash
 mkdir -p artifacts
-python -m src.rag.retrieval.analyze_accident \
-  --out out \
-  --file accident_description.txt \
+uv run python -m src.rag.retrieval.analyze_accident \
+  --out data/traffic_laws/chunks \
+  --file /path/to/accident_description.txt \
   --lang en \
   --save artifacts/accident-analysis.md
 ```
@@ -213,16 +236,7 @@ The generated report should always be treated as a review draft. Confirm that it
 
 ### 5. Estimate vehicle damage cost
 
-The Streamlit application accepts vehicle photos, segments damage and parts, lets a reviewer correct the detections, then produces an EGP estimate.
-
-```bash
-cd src/Car_damage_cost
-cp env.example .env
-# Add your own keys and adjust local model-weight paths in .env
-streamlit run app.py
-```
-
-Do not copy the sample placeholder values as credentials. The app can operate with its local placeholder price table when `GEMINI_API_KEY` is not configured.
+Open **Damage Estimator** in the React app sidebar, or navigate directly to `http://localhost:5173/damage`. The workflow accepts vehicle photos and vehicle details, then displays the damage assessment, repair-cost breakdown, and report export. Start the FastAPI backend and React development server using the instructions in [Run the real upload-to-report application](#run-the-real-upload-to-report-application); the React damage page uses the backend damage-assessment API.
 
 ## Evidence and safety principles
 
@@ -232,9 +246,21 @@ Do not copy the sample placeholder values as credentials. The app can operate wi
 - Damage predictions and cost ranges are estimates and should be checked against an inspection and local repair quotes.
 - Keep videos, personal information, plates, and API keys protected in accordance with applicable privacy requirements.
 
+## Verification
+
+```bash
+uv run pytest -q
+uv run ruff check src tests
+cd frontend
+npm run build
+npm run lint
+```
+
+Tests upload and decode real video bytes and verify both model adapters with inference/provider boundaries replaced by test doubles. They also cover GPU selection, retries, paths, concurrency, corpus retrieval, and invalid model outputs. They do not download model weights or call paid APIs.
+
 ## Evaluation
 
-RAG evaluation assets are in `evaluation/rag_evaluation/`, including a RAGAS test set. VLM support files in `src/VLM/` include contact-sheet and environment helpers for inspecting visual-model runs.
+RAG evaluation assets are in `evaluation/rag_evaluation/`, including a RAGAS test set. VLM support files in `src/video_understanding/` include contact-sheet and environment helpers for inspecting visual-model runs.
 
 ## Roadmap
 

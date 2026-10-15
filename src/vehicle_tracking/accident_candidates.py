@@ -360,6 +360,10 @@ def identify_accident_candidates(
 
         motion_detected = relative_motion["detected"]
 
+        # Braking by itself says nothing about interaction with this other vehicle.
+        if not overlap_detected and not motion_detected:
+            continue
+
         score = (
             0.4 * overlap_detected
             + 0.3 * motion_detected

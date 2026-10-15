@@ -1,39 +1,24 @@
 [project]
 name = "accident-intel"
 version = "0.1.0"
-description = "Add your description here"
+description = "Video accident analysis with vehicle tracking, local or hosted vision, traffic-law retrieval, and evidence-grounded reasoning"
 readme = "README.md"
 authors = [
     { name = "mahmoud-khaled23", email = "mahmoudkhaled1116@gmail.com" }
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "attr==0.3.2",
     "chromadb>=0.5.0",
-    "colorama==0.4.6",
-    "configparser==7.2.0",
-    "cryptography==50.0.2",
-    "cython>=3.3.0",
-    "docutils==0.23",
-    "filelock==4.0.8",
-    "htmlparser==0.0.2",
-    "ipython==8.12.3",
-    "ipywidgets==8.1.9",
-    "keyring==25.7.0",
     "pillow>=10.0.0",
-    "protobuf==7.36.2",
-    "pyopenssl==26.4.0",
-    "redis==8.1.0",
     "sentence-transformers>=3.0.0",
-    "thread==2.0.6",
-    "urllib3-secure-extra==0.1.0",
-    "fastapi>=0.111.0",
+    "fastapi>=0.115.0",
     "python-multipart>=0.0.9",
-    "uvicorn[standard]>=0.29.0",
+    "uvicorn[standard]>=0.30.0",
+    "starlette>=0.39.0", # FileResponse byte-range support for video playback
     "pydantic>=2.0.0",
     "pydantic-settings>=2.2.0",
     "python-dotenv>=1.0.0",
-    "ultralytics>=8.2.0",
+    "ultralytics>=8.3.0",
     "supervision>=0.22.0",
     "opencv-python>=4.9.0",
     "torch>=2.1.0",
@@ -49,21 +34,31 @@ dependencies = [
     "ddgs>=6.0.0",
     "openai>=1.30.0",
     "huggingface-hub>=0.23.0",
-    "aiosqlite>=0.20.0",
     "aiofiles>=25.1.0",
     "pandas>=3.0.6",
     "lap>=0.5.12",
 ]
 
 [project.scripts]
-accident-intel = "accident_intel:main"
+accident-intel = "src.accident_intel:main"
 
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.9.0",
 ]

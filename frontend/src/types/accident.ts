@@ -96,6 +96,8 @@ export interface LiabilityAssessment {
 
 /** Top-level accident record stored in the system */
 export interface AccidentRecord {
+  videoBackend?: import('./pipeline').VideoBackend;
+  videoModel?: import('./pipeline').VideoModelInfo;
   id: string;
   videoFilename: string;
   uploadDate: string; // ISO 8601

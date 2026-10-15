@@ -12,7 +12,7 @@ Utility: :func:`clean_meta` — sanitises metadata dicts to the scalar types
 accepted by Chroma (no ``None`` values or lists).
 
 Install once:
-    pip install chromadb sentence-transformers
+    uv sync --locked
 
 Build the index (run once):
     python build_index.py build --data title_7_clean.jsonl --db vtl_db

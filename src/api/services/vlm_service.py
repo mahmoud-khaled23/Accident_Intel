@@ -11,13 +11,7 @@ Helper functions:
 """
 import json
 import logging
-import sys
-from pathlib import Path
-
-# Ensure src/video_understanding/ is on sys.path so bare-name imports work.
-_video_understanding_path = str(Path(__file__).parents[3] / "src" / "video_understanding")
-if _video_understanding_path not in sys.path:
-    sys.path.insert(0, _video_understanding_path)
+from src.video_understanding import backend as video_backend
 
 logger = logging.getLogger(__name__)
 _vlm_model = None
@@ -89,6 +83,10 @@ def _compact_tracking_context(tracking_data: dict) -> dict:
             "class": track.get("class", "vehicle"),
             "first_seen_s": frames[0].get("timestamp") if frames else None,
             "last_seen_s": frames[-1].get("timestamp") if frames else None,
+            "sampled_positions": [
+                {"timestamp": frames[index].get("timestamp"), "bbox": frames[index].get("bbox")}
+                for index in sorted({0, len(frames) // 2, len(frames) - 1})
+            ] if frames else [],
         })
     candidates = []
     for candidate in (tracking_data.get("accident_candidates") or [])[:5]:
@@ -100,6 +98,8 @@ def _compact_tracking_context(tracking_data: dict) -> dict:
     return {
         "vehicle_count": tracking_data.get("vehicle_count", len(vehicles)),
         "duration_seconds": tracking_data.get("duration_seconds"),
+        "width": tracking_data.get("width"),
+        "height": tracking_data.get("height"),
         "vehicles": vehicles,
         "candidate_notes": candidates,
     }
@@ -120,7 +120,7 @@ def _analysis_prompt(tracking_data: dict | None, *, compact: bool = False) -> st
     Returns:
         The complete prompt string ready to send to the VLM.
     """
-    from prompts import TRAFFIC_ANALYSIS_PROMPT
+    from src.video_understanding.prompts import TRAFFIC_ANALYSIS_PROMPT
     from .tracking_service import summarize_tracking
 
     prompt = _HOSTED_ANALYSIS_PROMPT if compact else TRAFFIC_ANALYSIS_PROMPT
@@ -147,7 +147,7 @@ def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | Non
     Returns:
         The VLM scene description string.
     """
-    from hosted import analyze_hosted
+    from src.video_understanding.hosted import analyze_hosted
 
     n_frames = settings.vlm_n_frames
     return analyze_hosted(
@@ -173,11 +173,18 @@ def backend_info(settings) -> dict:
         A dict with ``backend``, ``model``, and ``module`` keys describing
         the active VLM backend.
     """
-    if settings.vlm_mock:
-        return {"backend": "mock", "model": None, "module": None}
-    if settings.video_vlm_api == "openai":
-        return {"backend": "openai", "model": settings.vlm_model, "module": "src.video_understanding.hosted"}
-    return {"backend": "local", "model": settings.vlm_model_id, "module": "src.video_understanding.analyze_video"}
+    backend = "mock" if settings.vlm_mock else video_backend.select_backend(settings.video_vlm_api)
+    error = None if backend == "mock" else video_backend.configuration_error(settings, backend)
+    return {
+        "requested": settings.video_vlm_api,
+        "backend": backend,
+        "model": None if backend == "mock" else settings.vlm_model if backend == "openai" else settings.vlm_model_id,
+        "module": None if backend == "mock" else f"src.video_understanding.{'hosted' if backend == 'openai' else 'analyze_video'}",
+        "gpu_available": video_backend.cuda_available(),
+        "api_configured": bool(settings.vlm_model.strip() and settings.vlm_api_key.strip()),
+        "ready": error is None,
+        "error": error,
+    }
 
 
 def analyze_video(video_path: str, accident_id: str, settings, tracking_data: dict | None = None) -> str:
@@ -200,12 +207,14 @@ def analyze_video(video_path: str, accident_id: str, settings, tracking_data: di
     if settings.vlm_mock:
         return _MOCK_DESCRIPTION
     info = backend_info(settings)
+    if not info["ready"]:
+        raise RuntimeError(info["error"])
     logger.info("Analysis %s: running %s with model %s", accident_id, info["module"], info["model"])
-    if settings.video_vlm_api == "openai":
+    if info["backend"] == "openai":
         return _analyze_via_openai_api(video_path, settings, tracking_data)
 
     global _vlm_model, _vlm_processor, _vlm_model_id
-    from analyze_video import analyze, load_model
+    from src.video_understanding.analyze_video import analyze, load_model
     if _vlm_model is None or _vlm_model_id != settings.vlm_model_id:
         # Drop the previous weights before loading a different model on the GPU.
         _vlm_model = _vlm_processor = _vlm_model_id = None

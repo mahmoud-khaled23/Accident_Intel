@@ -9,15 +9,8 @@ Provides two public functions:
 When ``settings.rag_mock`` is ``True`` both functions use the hard-coded
 :data:`_MOCK_LAWS` list so the API works without a built RAG index.
 """
-import sys
 from pathlib import Path
 
-# Ensure project root and src/ are on sys.path
-_project_root = str(Path(__file__).parents[3])
-_src_path = str(Path(__file__).parents[3] / "src")
-for _p in (_project_root, _src_path):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 _MOCK_LAWS = [
     {
@@ -90,8 +83,8 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
         return _MOCK_LAWS
 
     try:
-        from rag.chunking.query_expansion import expand_queries
-        from rag.retrieval.report_retrieval import retrieve_for_report
+        from src.rag.chunking.query_expansion import expand_queries
+        from src.rag.retrieval.report_retrieval import retrieve_for_report
     except ImportError as exc:
         raise RuntimeError(
             f"rag package not importable — check rag/retrieval dependencies. Original error: {exc}"
@@ -133,10 +126,8 @@ def get_law_by_id(section_id: str, out_dir: str, settings) -> dict | None:
     """Return a single law entry by its section ID, or None if not found.
 
     In mock mode this is a direct dict lookup against the in-memory
-    :data:`_MOCK_LAWS_INDEX`. In real RAG mode a semantic search is used as a
-    best-effort fallback because the RAG backend does not expose a
-    direct-by-ID retrieval API; the caller should treat a ``None`` return as a
-    definitive 404 only in mock mode.
+    :data:`_MOCK_LAWS_INDEX`. In real RAG mode the section is looked up directly in parents.json,
+    without loading an embedding model.
 
     Args:
         section_id: The law section identifier to look up
@@ -151,11 +142,17 @@ def get_law_by_id(section_id: str, out_dir: str, settings) -> dict | None:
     if settings.rag_mock:
         return _MOCK_LAWS_INDEX.get(section_id)
 
-    # Real RAG: perform a similarity search and look for an exact section_id match
-    # in the returned results.  This is inherently unreliable for opaque IDs.
-    results = retrieve_laws(section_id, out_dir, settings)
-    for item in results:
-        sid = item.get("section_id", "")
-        if sid == section_id or sid.endswith(section_id):
-            return item
-    return None
+    from src.rag.retrieval.index_and_retrieve import load
+    try:
+        parents, _ = load(out_dir)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Traffic-law lookup failed: {exc}") from exc
+    key = section_id.strip().upper()
+    if not key.startswith("VTL-"):
+        key = f"VTL-{key}"
+    item = parents.get(key)
+    if item is None:
+        return None
+    return {"section_id": item["id"], "title": item.get("title", ""),
+            "content": item.get("text", ""), "score": 0.0,
+            "metadata": {k: v for k, v in item.items() if k not in {"id", "title", "text"}}}

@@ -7,6 +7,7 @@ reasoning service.
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from src.video_understanding.backend import VideoBackend
 
 
 class AccidentCreate(BaseModel):
@@ -24,6 +25,7 @@ class AccidentCreate(BaseModel):
     date_time: str
     description: str = ""
     notes: str = ""
+    video_vlm_api: VideoBackend | None = None
 
 
 class AccidentResponse(BaseModel):
@@ -70,6 +72,8 @@ class AccidentResponse(BaseModel):
     failed_stage: str | None = None
     is_demo_data: bool = False
     video_metadata: dict | None = None
+    video_vlm_api: VideoBackend = "auto"
+    video_vlm: dict | None = None
 
 
 class AnalysisStatus(BaseModel):

@@ -1,8 +1,6 @@
 // PDF export utility — connects to jsPDF + html2canvas
 // In prototype mode this shows an informational message when the backend is not connected.
 
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 export interface PDFExportOptions {
   filename?: string;
@@ -20,6 +18,9 @@ export async function exportElementToPDF(
   const { filename = 'accident-intel-report.pdf', onError } = options;
 
   try {
+    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+      import('jspdf'), import('html2canvas'),
+    ]);
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
@@ -38,7 +39,7 @@ export async function exportElementToPDF(
     pdf.save(filename);
   } catch (err) {
     const message =
-      'PDF export is in prototype state. Connect to the backend for full PDF generation.';
+      'Could not export this report. Try again or use Print to save a PDF.';
     if (onError) {
       onError(message);
     } else {

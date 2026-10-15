@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cost_rules import (
+from .cost_rules import (
     NO_REPLACE,
     PAINT_AFTER_REPLACE,
     REPAIR_ACTIONS,
@@ -31,7 +31,7 @@ from cost_rules import (
     merge_actions,
     part_group,
 )
-from schemas import (
+from .schemas import (
     SEVERITY_RANK,
     CarInfo,
     CostLine,

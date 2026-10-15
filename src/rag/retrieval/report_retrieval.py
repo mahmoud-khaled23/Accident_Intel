@@ -30,13 +30,7 @@ import json
 import re
 from pathlib import Path
 
-try:
-    from rag.retrieval.index_and_retrieve import load, retrieve
-except ImportError:
-    try:
-        from .index_and_retrieve import load, retrieve
-    except ImportError:
-        from index_and_retrieve import load, retrieve
+from .index_and_retrieve import load, retrieve
 
 
 # (rule name, regex on the report text, short queries in the law's own wording, anchor section numbers)

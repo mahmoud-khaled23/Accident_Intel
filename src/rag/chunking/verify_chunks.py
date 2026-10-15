@@ -14,7 +14,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from build_chunks import extract_sections, info_from_path, resolve_ref, clean_lines, SECTION_START_RE
+from .build_chunks import extract_sections, info_from_path, resolve_ref, clean_lines, SECTION_START_RE
 
 # Website text that should never appear inside a chunk
 LEAK_RE = re.compile(

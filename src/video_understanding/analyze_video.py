@@ -2,9 +2,9 @@
 """Analyze a CCTV video with Qwen2-VL and print a traffic-incident report.
 
 Examples:
-    python analyze_video.py --video clip_07.mp4
-    python analyze_video.py --video clip_07.mp4 --prompt-mode json --n-frames 16
-    python analyze_video.py --video clip_07.mp4 --prompt-file my_prompt.txt -o report.txt
+    uv run python -m src.video_understanding.analyze_video --video clip_07.mp4
+    uv run python -m src.video_understanding.analyze_video --video clip_07.mp4 --prompt-mode json --n-frames 16
+    uv run python -m src.video_understanding.analyze_video --video clip_07.mp4 --prompt-file my_prompt.txt -o report.txt
 """
 import argparse
 from pathlib import Path
@@ -16,7 +16,7 @@ from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
 if __package__:
     from .prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
-else:  # Support `python src/VLM/analyze_video.py` as well as package imports.
+else:  # Direct script execution; prefer uv run python -m src.video_understanding.analyze_video.
     from prompts import SYSTEM_PROMPT, TRAFFIC_ANALYSIS_PROMPT, build_accident_prompt
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"
@@ -63,8 +63,7 @@ def parse_args():
 def load_model(model_id: str):
     """Download (if necessary) and load the Qwen2-VL model and its processor.
 
-    Loads ``Qwen2VLForConditionalGeneration`` in half-precision (``float16``)
-    when a CUDA device is available, otherwise in ``float32``.  ``device_map``
+    Requires CUDA and loads ``Qwen2VLForConditionalGeneration`` in half-precision (``float16``). ``device_map``
     is set to ``"auto"`` so multi-GPU and CPU-offload are handled automatically
     by the ``accelerate`` library.
 
@@ -79,11 +78,13 @@ def load_model(model_id: str):
     Example:
         >>> model, processor = load_model("Qwen/Qwen2-VL-7B-Instruct")
     """
+    if not torch.cuda.is_available():
+        raise RuntimeError("Local Qwen2-VL requires a CUDA GPU. Use the hosted API backend on CPU.")
     processor = AutoProcessor.from_pretrained(
         model_id, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS
     )
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_id, torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32, device_map="auto"
+        model_id, torch_dtype=torch.float16, device_map="auto"
     )
     print("Model loaded successfully!")
     print("Device mapping:", model.hf_device_map)

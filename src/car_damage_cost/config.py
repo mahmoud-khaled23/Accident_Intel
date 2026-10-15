@@ -16,10 +16,12 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 @dataclass
@@ -139,23 +141,9 @@ class Config:
         c.vlm_severity = os.getenv("VLM_SEVERITY", "0") == "1"
         c.vlm_quality_check = os.getenv("VLM_QUALITY_CHECK", "1") == "1"
 
-        from pathlib import Path
-        _base = Path(__file__).parent
-        for attr, candidates in [
-            ("damage_weights", [c.damage_weights, "weights/car_damage_cost/damage_segmentation.pt", "weights/damage_segmentation.pt", "weights/damage_seg.pt"]),
-            ("parts_weights", [c.parts_weights, "weights/car_damage_cost/parts_segmentation.pt", "weights/parts_segmentation.pt"]),
-            ("prices_path", [c.prices_path, "src/car_damage_cost/data/prices.json", "data/prices.json"]),
-            ("price_cache_path", [c.price_cache_path, "src/car_damage_cost/data/price_cache.json", "data/price_cache.json"]),
-        ]:
-            val = getattr(c, attr)
-            if not os.path.exists(val):
-                for cand in candidates:
-                    p1 = (_base / cand).resolve()
-                    p2 = Path(cand).resolve()
-                    if p1.exists():
-                        setattr(c, attr, str(p1))
-                        break
-                    elif p2.exists():
-                        setattr(c, attr, str(p2))
-                        break
+        for attr in ("damage_weights", "parts_weights", "prices_path", "price_cache_path"):
+            value = Path(getattr(c, attr).replace("\\", "/")).expanduser()
+            if not value.is_absolute():
+                value = PROJECT_ROOT / value
+            setattr(c, attr, str(value.resolve()))
         return c

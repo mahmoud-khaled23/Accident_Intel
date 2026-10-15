@@ -15,13 +15,13 @@ from pathlib import Path
 
 import cv2
 
-from config import Config
-from fusion import fuse_case
-from mapping import heuristic_severity, map_damage_to_parts
-from schemas import UNKNOWN_PART, CaseReport, DamageOnPart, PhotoResult
-from viz import save_debug
-from vlm_client import VlmClient
-from yolo_wrapper import YoloSegWrapper
+from .config import Config
+from .fusion import fuse_case
+from .mapping import heuristic_severity, map_damage_to_parts
+from .schemas import UNKNOWN_PART, CaseReport, DamageOnPart, PhotoResult
+from .viz import save_debug
+from .vlm_client import VlmClient
+from .yolo_wrapper import YoloSegWrapper
 
 
 def analyze_photo(

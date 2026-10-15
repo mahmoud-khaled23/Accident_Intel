@@ -24,6 +24,18 @@ export function TrackingPlayer({ src, tracks, selectedId, enabled, seekTo }: Pro
 
   useEffect(() => { setError(false); setTime(0); setDuration(0); }, [src]);
 
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    let frame: number;
+    const update = () => {
+      if (!element.paused) setTime(element.currentTime);
+      frame = requestAnimationFrame(update);
+    };
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [src]);
+
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-xl bg-black" style={{ aspectRatio: `${size.width}/${size.height}` }}>

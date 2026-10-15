@@ -1,13 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { NewAnalysisPage } from '@/pages/NewAnalysisPage';
-import { AnalysisDetailsPage } from '@/pages/AnalysisDetailsPage';
-import { AnalysisHistoryPage } from '@/pages/AnalysisHistoryPage';
-import { DamageEstimatorPage } from '@/pages/DamageEstimatorPage';
-import { TrafficLawsPage } from '@/pages/TrafficLawsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
   {
@@ -20,35 +12,35 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: <DashboardPage />,
+        lazy: async () => ({ Component: (await import('@/pages/DashboardPage')).DashboardPage }),
       },
       {
         path: 'analysis/new',
-        element: <NewAnalysisPage />,
+        lazy: async () => ({ Component: (await import('@/pages/NewAnalysisPage')).NewAnalysisPage }),
       },
       {
         path: 'analysis/:id',
-        element: <AnalysisDetailsPage />,
+        lazy: async () => ({ Component: (await import('@/pages/AnalysisDetailsPage')).AnalysisDetailsPage }),
       },
       {
         path: 'history',
-        element: <AnalysisHistoryPage />,
+        lazy: async () => ({ Component: (await import('@/pages/AnalysisHistoryPage')).AnalysisHistoryPage }),
       },
       {
         path: 'damage',
-        element: <DamageEstimatorPage />,
+        lazy: async () => ({ Component: (await import('@/pages/DamageEstimatorPage')).DamageEstimatorPage }),
       },
       {
         path: 'laws',
-        element: <TrafficLawsPage />,
+        lazy: async () => ({ Component: (await import('@/pages/TrafficLawsPage')).TrafficLawsPage }),
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).SettingsPage }),
       },
       {
         path: '*',
-        element: <NotFoundPage />,
+        lazy: async () => ({ Component: (await import('@/pages/NotFoundPage')).NotFoundPage }),
       },
     ],
   },

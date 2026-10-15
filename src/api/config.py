@@ -9,7 +9,7 @@ Key classes:
 """
 from pathlib import Path
 from typing import Literal
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict as SettingsConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
             (e.g. ``"gpt-4o-mini"``).
         gemini_api_key: Google Gemini API key used by the price agent.
         gemini_model: Gemini model identifier (e.g. ``"gemini-1.5-flash"``).
-        video_vlm_api: Selects the video VLM backend. ``"local"`` uses the
+        video_vlm_api: ``"auto"`` selects local when CUDA is available, otherwise API. ``"local"`` uses the
             local Qwen2-VL model; ``"openai"`` uses an OpenAI-compatible
             hosted vision API.
         vlm_base_url: Base URL for the hosted OpenAI-compatible VLM endpoint.
@@ -82,31 +82,50 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
     # Video selection is independent of VLM_API in the repair-cost configuration.
-    # The upload pipeline uses src/video_understanding/analyze_video.py unless explicitly overridden.
-    video_vlm_api: Literal["local", "openai"] = "local"
-    vlm_base_url: str = ""
-    vlm_model: str = ""
-    vlm_api_key: str = ""
+    video_vlm_api: Literal["auto", "local", "openai"] = "auto"
+    # Video-specific credentials take precedence; existing VLM_* settings still work.
+    vlm_base_url: str = Field(default="", validation_alias=AliasChoices("VIDEO_VLM_BASE_URL", "VLM_BASE_URL"))
+    vlm_model: str = Field(default="", validation_alias=AliasChoices("VIDEO_VLM_MODEL", "VLM_MODEL"))
+    vlm_api_key: str = Field(default="", validation_alias=AliasChoices("VIDEO_VLM_API_KEY", "VLM_API_KEY"))
     vlm_model_id: str = "Qwen/Qwen2-VL-7B-Instruct"
     # Conservative hosted defaults fit providers with a 7k input-token limit.
     # They can be increased after confirming the provider's vision quota.
     vlm_n_frames: int = Field(default=4, ge=1, le=128)
     vlm_max_images: int = Field(default=1, ge=1, le=32)
     vlm_max_tokens: int = Field(default=700, ge=1)
-    vlm_extra_params: dict = Field(default_factory=dict)
+    vlm_extra_params: dict = Field(default_factory=dict, validation_alias=AliasChoices("VIDEO_VLM_EXTRA_PARAMS", "VLM_EXTRA_PARAMS"))
     vlm_mock: bool = False
     tracking_mock: bool = False
-    tracking_model_path: str = "yolo11x.pt"
+    tracking_model_path: str = str(PROJECT_ROOT / "weights/vehicle_tracking/yolo11x.pt")
     reasoning_mock: bool = False
     rag_mock: bool = False
     damage_mock: bool = False
-    # The checked-in law corpus and its Chroma index live together here.
-    # Runtime uploads and SQLite state live under `out/` and must not be used
-    # as a retrieval index unless an index has explicitly been built there.
+    # Law corpus and index are provisioned separately from runtime uploads.
     rag_out_dir: Path = PROJECT_ROOT / "data/traffic_laws/chunks"
     rag_mode: Literal["hybrid", "dense", "bm25"] = "hybrid"
     rag_rerank: bool = True
     max_upload_mb: int = Field(default=500, ge=1)
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
     cors_extra_origin_pattern: str = r"https://.*\.(?:cloudspaces\.litng\.ai|litng\.ai)$"
-    model_config = SettingsConfig(env_file=PROJECT_ROOT / ".env", extra="ignore")
+    model_config = SettingsConfig(env_file=PROJECT_ROOT / ".env", extra="ignore", populate_by_name=True)
+
+    @field_validator("data_dir", "db_path", "rag_out_dir", mode="before")
+    @classmethod
+    def resolve_project_path(cls, value):
+        path = Path(str(value).replace("\\", "/")).expanduser()
+        return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+
+    @field_validator("tracking_model_path", mode="before")
+    @classmethod
+    def resolve_tracking_model(cls, value):
+        path = Path(str(value).replace("\\", "/")).expanduser()
+        if not path.is_absolute():
+            # Bare Ultralytics model names also download into the weights folder.
+            path = PROJECT_ROOT / (Path("weights/vehicle_tracking") / path if path.parent == Path(".") else path)
+        return str(path.resolve())
+
+    @model_validator(mode="after")
+    def database_follows_data_directory(self):
+        if "db_path" not in self.model_fields_set:
+            self.db_path = self.data_dir / "accident_intel.db"
+        return self
