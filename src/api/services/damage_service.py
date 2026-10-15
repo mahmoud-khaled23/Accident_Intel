@@ -1,4 +1,4 @@
-"""Damage assessment service — wraps src/Car_damage_cost/pipeline.py.
+"""Damage assessment service — wraps src/car_damage_cost/pipeline.py.
 
 Provides a single public function :func:`run_damage_assessment` that runs the
 full car-damage detection and cost-estimation pipeline.
@@ -9,12 +9,12 @@ so its own directory is inserted at the front of ``sys.path`` here.
 import sys
 from pathlib import Path
 
-# Ensure project root, src/, and src/Car_damage_cost/ are on sys.path.
-# Car_damage_cost uses bare imports (e.g. `from config import Config`) so its
+# Ensure project root, src/, and src/car_damage_cost/ are on sys.path.
+# car_damage_cost uses bare imports (e.g. `from config import Config`) so its
 # own directory MUST be on sys.path directly.
 _project_root = str(Path(__file__).parents[3])
 _src_path = str(Path(__file__).parents[3] / "src")
-_car_damage_path = str(Path(__file__).parents[3] / "src" / "Car_damage_cost")
+_car_damage_path = str(Path(__file__).parents[3] / "src" / "car_damage_cost")
 for _p in (_project_root, _src_path, _car_damage_path):
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -93,21 +93,21 @@ def run_damage_assessment(
 
     # Real mode — import heavy modules inside the function
     try:
-        from Car_damage_cost.pipeline import analyze_case  # noqa: F401
-        from Car_damage_cost.config import Config          # noqa: F401
+        from pipeline import analyze_case  # noqa: F401
+        from config import Config          # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
-            f"Car_damage_cost package not importable — are YOLO weights present? "
+            f"car_damage_cost package not importable — are YOLO weights present? "
             f"Original error: {exc}"
         ) from exc
 
     try:
-        from Car_damage_cost.schemas import CarInfo
-        from Car_damage_cost.cost_engine import estimate_cost, load_tables
-        from Car_damage_cost.yolo_wrapper import YoloSegWrapper
+        from schemas import CarInfo
+        from cost_engine import estimate_cost, load_tables
+        from yolo_wrapper import YoloSegWrapper
     except ImportError as exc:
         raise RuntimeError(
-            f"Car_damage_cost sub-modules not importable. Original error: {exc}"
+            f"car_damage_cost sub-modules not importable. Original error: {exc}"
         ) from exc
 
     cfg = Config.from_env()

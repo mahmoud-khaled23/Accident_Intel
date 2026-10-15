@@ -19,7 +19,7 @@ from pathlib import Path
 
 _src_dir = str(Path(__file__).parents[2])             # Accident_Intel/
 _src_src_dir = str(Path(__file__).parents[2] / "src") # Accident_Intel/src/
-_vlm_dir = str(Path(__file__).parents[2] / "src" / "VLM")
+_vlm_dir = str(Path(__file__).parents[2] / "src" / "video_understanding")
 _rag_dir = str(Path(__file__).parents[2] / "src" / "rag")
 _reasoning_dir = str(Path(__file__).parents[2] / "src" / "reasoning")
 _car_damage_dir = str(Path(__file__).parents[2] / "src" / "car_damage_cost")

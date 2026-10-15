@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
     # Video selection is independent of VLM_API in the repair-cost configuration.
-    # The upload pipeline uses src/VLM/analyze_video.py unless explicitly overridden.
+    # The upload pipeline uses src/video_understanding/analyze_video.py unless explicitly overridden.
     video_vlm_api: Literal["local", "openai"] = "local"
     vlm_base_url: str = ""
     vlm_model: str = ""

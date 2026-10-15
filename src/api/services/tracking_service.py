@@ -22,7 +22,7 @@ def run_tracking(
     accident_id: str,
     output_dir: str,
     mock: bool = False,
-    model_path: str = "yolo11x.pt",
+    model_path: str = "weights/vehicle_tracking/yolo11x.pt",
 ) -> dict:
     """Run vehicle tracking on a video and return a trajectory dict.
 

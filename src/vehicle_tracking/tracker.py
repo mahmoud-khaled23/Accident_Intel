@@ -10,7 +10,7 @@ from pathlib import Path
 
 import cv2
 
-DEFAULT_MODEL_PATH = "yolo11x.pt"
+DEFAULT_MODEL_PATH = "weights/vehicle_tracking/yolo11x.pt"
 VEHICLE_CLASSES = [2, 3, 5, 7]  # car, motorcycle, bus, truck (COCO ids)
 IMGSZ = 1024
 CONF = 0.25

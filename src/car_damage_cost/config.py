@@ -31,9 +31,9 @@ class Config:
 
     Attributes:
         damage_weights: Path to the YOLO segmentation weights file for damage
-            detection (e.g. ``weights/damage_seg.pt``).
+            detection (e.g. ``weights/car_damage_cost/damage_segmentation.pt``).
         parts_weights: Path to the YOLO segmentation weights file for car-part
-            detection (e.g. ``weights/parts_segmentation.pt``).
+            detection (e.g. ``weights/car_damage_cost/parts_segmentation.pt``).
         vlm_base_url: Base URL of the VLM server (Ollama or OpenAI-compatible).
         vlm_model: Model name/tag to use for VLM calls.
         vlm_timeout: HTTP timeout in seconds for each VLM request.
@@ -67,8 +67,8 @@ class Config:
     """
 
     # --- models ---
-    damage_weights: str = "weights/damage_seg.pt"
-    parts_weights: str = "weights/parts_segmentation.pt"
+    damage_weights: str = "weights/car_damage_cost/damage_segmentation.pt"
+    parts_weights: str = "weights/car_damage_cost/parts_segmentation.pt"
 
     # --- VLM (Ollama) ---
     vlm_base_url: str = "http://localhost:11434"
@@ -111,7 +111,7 @@ class Config:
         corresponding environment variable when it is set. Also resolves weight
         and data file paths against several candidate locations so the module
         works whether it is run from the repo root or from within
-        ``src/Car_damage_cost/``.
+        ``src/car_damage_cost/``.
 
         Returns:
             A fully populated :class:`Config` instance.
@@ -142,10 +142,10 @@ class Config:
         from pathlib import Path
         _base = Path(__file__).parent
         for attr, candidates in [
-            ("damage_weights", [c.damage_weights, "src/Car_damage_cost/weights/damage_segmentation.pt", "weights/damage_segmentation.pt", "weights/damage_seg.pt"]),
-            ("parts_weights", [c.parts_weights, "src/Car_damage_cost/weights/parts_segmentation.pt", "weights/parts_segmentation.pt"]),
-            ("prices_path", [c.prices_path, "src/Car_damage_cost/data/prices.json", "data/prices.json"]),
-            ("price_cache_path", [c.price_cache_path, "src/Car_damage_cost/data/price_cache.json", "data/price_cache.json"]),
+            ("damage_weights", [c.damage_weights, "weights/car_damage_cost/damage_segmentation.pt", "weights/damage_segmentation.pt", "weights/damage_seg.pt"]),
+            ("parts_weights", [c.parts_weights, "weights/car_damage_cost/parts_segmentation.pt", "weights/parts_segmentation.pt"]),
+            ("prices_path", [c.prices_path, "src/car_damage_cost/data/prices.json", "data/prices.json"]),
+            ("price_cache_path", [c.price_cache_path, "src/car_damage_cost/data/price_cache.json", "data/price_cache.json"]),
         ]:
             val = getattr(c, attr)
             if not os.path.exists(val):

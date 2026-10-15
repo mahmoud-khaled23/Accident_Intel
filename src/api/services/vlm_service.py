@@ -1,4 +1,4 @@
-"""VLM video analysis service — wraps src/VLM (local Qwen2-VL or hosted vision API).
+"""VLM video analysis service — wraps src/video_understanding (local Qwen2-VL or hosted vision API).
 
 Provides a single public entry point :func:`analyze_video` that dispatches to
 the appropriate backend based on ``settings.video_vlm_api``.  A realistic mock
@@ -11,6 +11,13 @@ Helper functions:
 """
 import json
 import logging
+import sys
+from pathlib import Path
+
+# Ensure src/video_understanding/ is on sys.path so bare-name imports work.
+_video_understanding_path = str(Path(__file__).parents[3] / "src" / "video_understanding")
+if _video_understanding_path not in sys.path:
+    sys.path.insert(0, _video_understanding_path)
 
 logger = logging.getLogger(__name__)
 _vlm_model = None
@@ -103,7 +110,7 @@ def _analysis_prompt(tracking_data: dict | None, *, compact: bool = False) -> st
 
     When ``compact=True`` the hosted-API prompt template is used and tracking
     data is compacted to conserve vision-API token quota.  When ``compact=False``
-    the full local-model prompt from ``src/VLM/prompts.py`` is used.
+    the full local-model prompt from ``src/video_understanding/prompts.py`` is used.
 
     Args:
         tracking_data: Optional tracking result dict. When provided, the
@@ -113,7 +120,7 @@ def _analysis_prompt(tracking_data: dict | None, *, compact: bool = False) -> st
     Returns:
         The complete prompt string ready to send to the VLM.
     """
-    from src.VLM.prompts import TRAFFIC_ANALYSIS_PROMPT
+    from prompts import TRAFFIC_ANALYSIS_PROMPT
     from .tracking_service import summarize_tracking
 
     prompt = _HOSTED_ANALYSIS_PROMPT if compact else TRAFFIC_ANALYSIS_PROMPT
@@ -130,7 +137,7 @@ def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | Non
     """Run video analysis through an OpenAI-compatible hosted vision API.
 
     Extracts frames from the video, selects up to ``settings.vlm_n_frames``
-    of them, and calls the hosted API via ``src/VLM/hosted.py``.
+    of them, and calls the hosted API via ``src/video_understanding/hosted.py``.
 
     Args:
         video_path: Path to the input video file.
@@ -140,11 +147,9 @@ def _analyze_via_openai_api(video_path: str, settings, tracking_data: dict | Non
     Returns:
         The VLM scene description string.
     """
-    from src.VLM.hosted import analyze_hosted
-    from .video_service import inspect_video
+    from hosted import analyze_hosted
 
-    metadata = inspect_video(video_path)
-    n_frames = min(settings.vlm_n_frames, metadata["frame_count"])
+    n_frames = settings.vlm_n_frames
     return analyze_hosted(
         video_path,
         _analysis_prompt(tracking_data, compact=True),
@@ -171,8 +176,8 @@ def backend_info(settings) -> dict:
     if settings.vlm_mock:
         return {"backend": "mock", "model": None, "module": None}
     if settings.video_vlm_api == "openai":
-        return {"backend": "openai", "model": settings.vlm_model, "module": "src.VLM.hosted"}
-    return {"backend": "local", "model": settings.vlm_model_id, "module": "src.VLM.analyze_video"}
+        return {"backend": "openai", "model": settings.vlm_model, "module": "src.video_understanding.hosted"}
+    return {"backend": "local", "model": settings.vlm_model_id, "module": "src.video_understanding.analyze_video"}
 
 
 def analyze_video(video_path: str, accident_id: str, settings, tracking_data: dict | None = None) -> str:
@@ -200,7 +205,7 @@ def analyze_video(video_path: str, accident_id: str, settings, tracking_data: di
         return _analyze_via_openai_api(video_path, settings, tracking_data)
 
     global _vlm_model, _vlm_processor, _vlm_model_id
-    from src.VLM.analyze_video import analyze, load_model
+    from analyze_video import analyze, load_model
     if _vlm_model is None or _vlm_model_id != settings.vlm_model_id:
         # Drop the previous weights before loading a different model on the GPU.
         _vlm_model = _vlm_processor = _vlm_model_id = None
