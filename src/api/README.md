@@ -23,17 +23,22 @@ substitute sample accident results. The existing project `.env` is read from the
 
 - Tracking: YOLO11x + BoT-SORT, `TRACKING_MODEL_PATH=yolo11x.pt`. Weights download on first use.
   `lap` is required by BoT-SORT and is declared in the dependency files.
-- Local visual model: `VLM_API=local`, `VLM_MODEL_ID=Qwen/Qwen2-VL-7B-Instruct`. GPU strongly recommended.
-- Hosted visual model: `VLM_API=openai`, `VLM_BASE_URL`, `VLM_MODEL`, `VLM_API_KEY`.
-  The model must accept images. `VLM_N_FRAMES` (default 16) controls sampled frames.
+- Local visual model (default): `VIDEO_VLM_API=local`, `VLM_MODEL_ID=Qwen/Qwen2-VL-7B-Instruct`.
+  Calls `src/VLM/analyze_video.py` with the stored upload and real tracking context. GPU strongly recommended.
+- Hosted visual model (explicit opt-in): `VIDEO_VLM_API=openai`, `VLM_BASE_URL`, `VLM_MODEL`, `VLM_API_KEY`.
+  The model must accept images. `VLM_N_FRAMES` (default 4) controls sampled frames.
   Hosted frames are grouped into timestamped contact sheets with at most `VLM_MAX_IMAGES`
-  images (default 3, matching the configured provider's limit). Adjust for your provider. `VLM_MAX_TOKENS` defaults to 1400; optional `VLM_EXTRA_PARAMS` is JSON.
-- Retrieval: `RAG_OUT_DIR=out` must contain `parents.json` and `children.jsonl`.
+  images (default 1). The hosted prompt and tracking context are deliberately bounded for providers
+  with a 7k input-token limit. `VLM_MAX_TOKENS` defaults to 700; optional `VLM_EXTRA_PARAMS` is JSON.
+- Retrieval: `RAG_OUT_DIR=src/rag/chunking/out` must contain `parents.json` and `children.jsonl`.
   Hybrid dense/BM25 retrieval with reranking is the default; an empty dense index is built on first use.
   `RAG_MODE=bm25` and `RAG_RERANK=false` explicitly select a lighter configuration without embedding downloads.
 - Reasoning: `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and `REASONING_MODEL` (default `gpt-4o-mini`).
   Existing OpenRouter keys automatically use its endpoint. The visual description, bounded tracking
   summary, retrieved passages, and unverified user context are passed to the reasoning model.
+
+`VLM_API` no longer selects the video backend; it may remain in `.env` for repair-cost analysis.
+Use `VIDEO_VLM_API` to select local or hosted video analysis without changing that separate pipeline.
 
 `DATA_DIR` and `DB_PATH` configure storage; defaults are `out` and `out/accident_intel.db` under
 this project. `MAX_UPLOAD_MB` defaults to 500. The backend checks size, format, metadata, and
@@ -52,6 +57,7 @@ for browser playback; unsupported browser codecs show a playback error without h
 5. Retry a failed job with the same analyze endpoint. Its stale results and error are cleared.
 
 `GET /api/health` reports server health and real/demo configuration for each pipeline stage.
+Its `video_vlm` object identifies the configured backend, model, and source module (not model readiness).
 Interactive endpoint documentation: `/docs`.
 
 ## Verification

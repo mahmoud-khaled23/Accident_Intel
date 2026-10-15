@@ -1,5 +1,4 @@
-// Accident analysis service — mock mode or real FastAPI backend
-// DEMO DATA — replace MOCK_* imports with real API calls when backend is connected
+// Accident analysis service — live FastAPI backend with explicit opt-in mock mode.
 
 import type {
   AccidentRecord,
@@ -181,31 +180,17 @@ function mapTrackingData(raw: BackendTrackingData | null | undefined): {
 }
 
 function mapVLMDescription(text: string | null | undefined): VLMAnalysis {
-  const raw = text?.trim() ?? '';
-  const section = (name: string): string => {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = raw.match(new RegExp(`(?:^|\\n)\\s*(?:#+\\s*)?${escaped}\\s*:?[\\s\\r\\n]*([\\s\\S]*?)(?=\\n\\s*(?:#+\\s*)?[A-Z][A-Za-z &/]+\\s*:|$)`, 'i'));
-    return match?.[1]?.trim() ?? '';
-  };
-
-  const scene = section('Scene Overview');
-  const events = section('Chronological Events') || section('Timeline');
-  const collision = section('Collision Evidence') || section('Collision Description');
-  const finalState = section('Final Observed State') || section('Final State');
-  const uncertainties = section('Uncertainties and Limitations') || section('Unclear Details');
-
-  // The VLM's source output is prose. This adapter exposes the original text
-  // in the existing UI without inventing structured claims or timestamps.
+  // src/VLM returns prose, not a structured timeline. Keep every section intact
+  // (including incident evidence and limitations); don't label prose as facts
+  // or infer timestamps that the model did not provide as structured data.
   return {
-    summary: scene || raw,
-    timeline: events ? [{ type: 'fact', content: events }] : [],
+    summary: text ?? '',
+    timeline: [],
     vehicleActions: {},
-    collisionDescription: collision || finalState,
+    collisionDescription: '',
     trafficSignals: '',
-    roadContext: scene,
-    uncertainties: uncertainties
-      ? uncertainties.split(/\n|(?:^|\\s)[•-]\\s+/).map((item) => item.trim()).filter(Boolean)
-      : [],
+    roadContext: '',
+    uncertainties: [],
   };
 }
 

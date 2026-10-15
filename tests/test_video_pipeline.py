@@ -44,22 +44,25 @@ def test_format_size_and_pagination_validation(test_client, monkeypatch):
     assert test_client.get('/api/accidents/?page=-1').status_code == 422
 
 
-def test_real_adapters_pass_video_tracking_and_context_through_models(test_client, video_bytes, monkeypatch):
+@pytest.mark.parametrize('backend', ['local', 'openai'])
+def test_real_adapters_pass_video_tracking_and_context_through_models(test_client, video_bytes, monkeypatch, backend):
     settings = get_settings()
     for name in ('tracking', 'vlm', 'rag', 'reasoning'):
         monkeypatch.setattr(settings, f'{name}_mock', False)
-    monkeypatch.setattr(settings, 'vlm_api', 'openai')
+    monkeypatch.setattr(settings, 'video_vlm_api', backend)
     monkeypatch.setattr(settings, 'vlm_model', 'test-vision')
     monkeypatch.setattr(settings, 'vlm_api_key', 'test-key')
     monkeypatch.setattr(settings, 'openai_api_key', 'test-key')
     monkeypatch.setattr(settings, 'vlm_n_frames', 3)
     seen = {}
+    stages = []
     from vehicle_tracking import tracker
 
     def process_video(video_path, output_video, output_json, model_path):
         assert Path(video_path).read_bytes() == video_bytes
         assert str(settings.data_dir) in output_json
         seen['tracking_model'] = model_path
+        stages.append('tracking')
         return {7: {'class': 'car', 'trajectory': {'0': {'box': [0, 30, 25, 60], 'confidence': 0.83},
                                                    '10': {'box': [40, 30, 65, 60], 'confidence': 0.91}}}}
     monkeypatch.setattr(tracker, 'process_video', process_video)
@@ -67,9 +70,55 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
     description = 'Vehicle 7 moves through the frame. No collision is visible.'
     laws = [{'id': 'VTL-TEST', 'title': 'Test passage', 'text': 'A test passage.', 'score': 0.04}]
 
+    if backend == 'local':
+        import torch
+        from transformers import BatchEncoding
+        from src.VLM import analyze_video as local_vlm
+        from src.VLM.prompts import SYSTEM_PROMPT
+        from src.api.services import vlm_service
+
+        class Processor:
+            def apply_chat_template(self, messages, **kwargs):
+                assert messages[0]['content'] == SYSTEM_PROMPT
+                video, prompt = messages[-1]['content']
+                assert Path(video['video']).read_bytes() == video_bytes
+                assert str(settings.data_dir) in video['video']
+                assert video['nframes'] == 2  # Qwen rounds to an even count.
+                assert '"id":7' in prompt['text']
+                return 'Video prompt'
+
+            def __call__(self, **kwargs):
+                # Real Qwen video preprocessing decoded the actual uploaded clip.
+                assert len(kwargs['videos']) == 1
+                assert kwargs['videos'][0].shape[0] == 2
+                return BatchEncoding({'input_ids': torch.tensor([[1, 2]])})
+
+            def batch_decode(self, tokens, **kwargs):
+                assert tokens[0].tolist() == [3]
+                return [description]
+
+        class Model:
+            device = 'cpu'
+
+            def generate(self, **kwargs):
+                assert kwargs['max_new_tokens'] == settings.vlm_max_tokens
+                assert kwargs['do_sample'] is False
+                seen['vlm'] = True
+                stages.append('vlm')
+                return torch.tensor([[1, 2, 3]])
+
+        def load_model(model_id):
+            assert model_id == settings.vlm_model_id
+            return Model(), Processor()
+
+        monkeypatch.setattr(local_vlm, 'load_model', load_model)
+        for name in ('_vlm_model', '_vlm_processor', '_vlm_model_id'):
+            monkeypatch.setattr(vlm_service, name, None)
+
     def retrieve_for_report(**kwargs):
         assert kwargs['description'] == description
         seen['rag'] = kwargs
+        stages.append('rag')
         return laws
     monkeypatch.setitem(sys.modules, 'rag.retrieval.report_retrieval', SimpleNamespace(retrieve_for_report=retrieve_for_report))
 
@@ -82,17 +131,20 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
         def create(self, **kwargs):
             content = kwargs['messages'][-1]['content']
             if isinstance(content, list):
+                assert backend == 'openai', 'Local video inference must not call a hosted vision API'
                 images = [x['image_url']['url'] for x in content if x['type'] == 'image_url']
-                assert len(images) == 3 and len(set(images)) == 3
+                assert len(images) == settings.vlm_max_images and len(set(images)) == settings.vlm_max_images
                 assert all(x.startswith('data:image/jpeg;base64,') for x in images)
-                assert '"id": 7' in content[0]['text']
+                assert '"id":7' in content[0]['text']
                 assert '1.100 seconds' in str(content)
                 seen['vlm'] = True
+                stages.append('vlm')
                 result = description
             else:
                 assert description in content and 'VTL-TEST' in content and '"id": 7' in content
                 assert 'Review the green vehicle' in content
                 seen['reasoning'] = True
+                stages.append('reasoning')
                 result = json.dumps({'overall_assessment': 'No observed collision.', 'overall_level': 'insufficient_evidence',
                                      'vehicles': [], 'violations': [], 'confidence': 0.8, 'limitations': ['Short clip.']})
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=result))])
@@ -110,6 +162,62 @@ def test_real_adapters_pass_video_tracking_and_context_through_models(test_clien
     assert result['tracking_data']['trajectories'][0]['frames'][0]['confidence'] == 0.83
     assert result['report']['overall_assessment'] == 'No observed collision.'
     assert set(seen) == {'tracking_model', 'vlm', 'rag', 'reasoning'}
+    assert stages == ['tracking', 'vlm', 'rag', 'reasoning']
+    assert test_client.get(f'/api/accidents/{aid}/vlm').json()['description'] == description
+    assert test_client.get(f'/api/accidents/{aid}/laws').json()['laws'][0]['section_id'] == 'VTL-TEST'
+    assert test_client.get(f'/api/accidents/{aid}/report').json()['report'] == result['report']
+
+
+def test_video_backend_is_independent_of_shared_vlm_api(monkeypatch):
+    from src.api.config import Settings
+    from src.api.services.vlm_service import backend_info
+
+    monkeypatch.delenv('VIDEO_VLM_API', raising=False)
+    monkeypatch.setenv('VLM_API', 'openai')
+    monkeypatch.setenv('VLM_MOCK', 'false')
+    monkeypatch.setenv('VLM_MODEL_ID', 'Qwen/Qwen2-VL-7B-Instruct')
+    assert backend_info(Settings(_env_file=None)) == {
+        'backend': 'local', 'model': 'Qwen/Qwen2-VL-7B-Instruct', 'module': 'src.VLM.analyze_video',
+    }
+    monkeypatch.setenv('VIDEO_VLM_API', 'openai')
+    assert backend_info(Settings(_env_file=None))['module'] == 'src.VLM.hosted'
+
+
+def test_health_identifies_selected_video_model(test_client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, 'vlm_mock', False)
+    monkeypatch.setattr(settings, 'video_vlm_api', 'local')
+    info = test_client.get('/api/health').json()['video_vlm']
+    assert info == {'backend': 'local', 'model': settings.vlm_model_id, 'module': 'src.VLM.analyze_video'}
+
+
+def test_local_vlm_uses_own_prompts_despite_bare_import_collisions(monkeypatch):
+    import importlib
+    from src.VLM import analyze_video, prompts
+
+    monkeypatch.setitem(sys.modules, 'prompts', SimpleNamespace(
+        SYSTEM_PROMPT='unrelated', TRAFFIC_ANALYSIS_PROMPT='unrelated', build_accident_prompt=None,
+    ))
+    module = importlib.reload(analyze_video)
+    assert module.SYSTEM_PROMPT == prompts.SYSTEM_PROMPT
+    assert module.TRAFFIC_ANALYSIS_PROMPT == prompts.TRAFFIC_ANALYSIS_PROMPT
+
+
+def test_empty_vlm_output_stops_before_rag_and_reasoning(test_client, video_bytes, monkeypatch):
+    from src.api.services import vlm_service, law_service, reasoning_service
+
+    monkeypatch.setattr(vlm_service, 'analyze_video', lambda *args: '  \n')
+
+    def must_not_run(*args):
+        pytest.fail('Downstream stages must not run without a VLM description')
+
+    monkeypatch.setattr(law_service, 'retrieve_laws', must_not_run)
+    monkeypatch.setattr(reasoning_service, 'analyze_accident', must_not_run)
+    aid = upload(test_client, video_bytes).json()['id']
+    test_client.post(f'/api/accidents/{aid}/analyze')
+    result = test_client.get(f'/api/accidents/{aid}').json()
+    assert result['status'] == 'failed' and result['failed_stage'] == 'vlm_analysis'
+    assert result['laws'] is None and result['report'] is None
 
 
 def test_failure_is_visible_partial_results_survive_and_retry_clears_stale_data(test_client, video_bytes, monkeypatch):
@@ -182,7 +290,7 @@ def test_hosted_vlm_contact_sheets_respect_image_limit(test_client, video_bytes,
             assert len(images) == 3
             for data in images:
                 sheet = Image.open(io.BytesIO(base64.b64decode(data.split(',')[1])))
-                assert sheet.size == (768, 482)
+                assert sheet.size == (384, 266)
             captions = ' '.join(x['text'] for x in content[1:] if x['type'] == 'text')
             for i in range(12): assert f'{i / 10:.3f} seconds' in captions
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='Observed frames.'))])

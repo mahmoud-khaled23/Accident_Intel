@@ -21,15 +21,15 @@ def analyze_hosted(
     """Sample frames, group them into timestamped contact sheets, and call a vision chat model."""
     import openai
 
-    try:
-        from contact_sheet import make_sheet, sample_frames
-        from prompts import SYSTEM_PROMPT
-    except ImportError:
+    if __package__:
         from .contact_sheet import make_sheet, sample_frames
         from .prompts import SYSTEM_PROMPT
+    else:
+        from contact_sheet import make_sheet, sample_frames
+        from prompts import SYSTEM_PROMPT
 
     if not model:
-        raise RuntimeError("Set VLM_MODEL to a vision-capable model for VLM_API=openai.")
+        raise RuntimeError("Set VLM_MODEL to a vision-capable model for VIDEO_VLM_API=openai.")
     if not api_key:
         raise RuntimeError("Set VLM_API_KEY for the hosted visual model.")
 
@@ -52,10 +52,11 @@ def analyze_hosted(
         group = frames[offset : offset + group_size]
         if len(group) == 1:
             ts, picture = group[0]
-            picture.thumbnail((768, 768))
+            picture.thumbnail((384, 384))
             caption = f"Frame at {ts:.3f} seconds"
         else:
-            picture = make_sheet(group, cols=math.ceil(math.sqrt(len(group))), thumb_w=384, thumb_h=216)
+            # A compact sheet leaves room for the report within providers' input-token limits.
+            picture = make_sheet(group, cols=math.ceil(math.sqrt(len(group))), thumb_w=192, thumb_h=108)
             caption = "Video frames at " + ", ".join(f"{ts:.3f} seconds" for ts, _ in group)
         buffer = io.BytesIO()
         picture.save(buffer, format="JPEG", quality=85)

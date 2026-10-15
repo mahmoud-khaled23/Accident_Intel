@@ -16,14 +16,18 @@ class Settings(BaseSettings):
     reasoning_model: str = "gpt-4o-mini"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
-    vlm_api: Literal["local", "openai"] = "local"
+    # Video selection is independent of VLM_API in the repair-cost configuration.
+    # The upload pipeline uses src/VLM/analyze_video.py unless explicitly overridden.
+    video_vlm_api: Literal["local", "openai"] = "local"
     vlm_base_url: str = ""
     vlm_model: str = ""
     vlm_api_key: str = ""
     vlm_model_id: str = "Qwen/Qwen2-VL-7B-Instruct"
-    vlm_n_frames: int = Field(default=16, ge=1, le=128)
-    vlm_max_images: int = Field(default=3, ge=1, le=32)
-    vlm_max_tokens: int = Field(default=1400, ge=1)
+    # Conservative hosted defaults fit providers with a 7k input-token limit.
+    # They can be increased after confirming the provider's vision quota.
+    vlm_n_frames: int = Field(default=4, ge=1, le=128)
+    vlm_max_images: int = Field(default=1, ge=1, le=32)
+    vlm_max_tokens: int = Field(default=700, ge=1)
     vlm_extra_params: dict = Field(default_factory=dict)
     vlm_mock: bool = False
     tracking_mock: bool = False

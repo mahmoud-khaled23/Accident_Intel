@@ -75,7 +75,7 @@ export function VLMDescription({ description, loading, onSeek }: VLMDescriptionP
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <CardTitle>Accident Summary</CardTitle>
+            <CardTitle>VLM Video Description</CardTitle>
           </div>
         </CardHeader>
         <CardContent>

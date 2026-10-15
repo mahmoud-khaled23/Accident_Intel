@@ -46,6 +46,16 @@ flowchart TD
 
 The React UI and FastAPI backend connect uploads to tracking, visual analysis, law retrieval, and reasoning. Progress, intermediate results, and reports persist in SQLite. See [the backend setup](src/api/README.md) for model configuration and startup instructions.
 
+React uploads the actual video to FastAPI; the Python models run on the backend:
+
+1. Save the uploaded video and run the existing vehicle-tracking preprocessing.
+2. Pass that same video and its tracking observations to `src/VLM/analyze_video.py` (local Qwen2-VL).
+3. Send the VLM description to `src/rag/retrieval/report_retrieval.py` to retrieve law passages.
+4. Send the description, retrieved passages, tracking context, and optional user notes to `src/reasoning/reasoning_accident.py`.
+5. Save the structured report and display it, together with the full VLM description, in React.
+
+Repair-cost analysis remains a separate, unchanged branch.
+
 ## Repository layout
 
 ```text
@@ -90,10 +100,11 @@ RAG_MOCK=false
 REASONING_MOCK=false
 
 # Choose exactly one VLM option.
-# Local Qwen2-VL:
-VLM_API=local
+# Local Qwen2-VL from src/VLM/analyze_video.py (default):
+VIDEO_VLM_API=local
+VLM_MODEL_ID=Qwen/Qwen2-VL-7B-Instruct
 # Hosted OpenAI-compatible VLM:
-# VLM_API=openai
+# VIDEO_VLM_API=openai
 # VLM_BASE_URL=https://your-provider.example/v1
 # VLM_MODEL=your-vision-capable-model
 # VLM_API_KEY=your_provider_key
@@ -103,6 +114,11 @@ OPENAI_BASE_URL=https://your-provider.example/v1
 REASONING_MODEL=your_reasoning_model
 RAG_OUT_DIR=src/rag/chunking/out
 ```
+
+The video pipeline uses `VIDEO_VLM_API`, not the shared `VLM_API` setting used by repair-cost analysis.
+Existing `VLM_API=openai` entries will therefore not redirect uploaded videos to a hosted model.
+To deliberately use hosted video analysis, set `VIDEO_VLM_API=openai` and its provider settings above.
+Do not replace your existing `.env` or repair-cost credentials; add only the video settings you need.
 
 Then start the API and React development server in separate terminals:
 
@@ -126,6 +142,8 @@ VITE_API_BASE_URL=
 ```
 
 Open `http://localhost:5173`, select **New Video Analysis**, upload a valid MP4, MOV, or WebM file, and choose **Upload and analyze**. The saved analysis page updates through tracking, VLM analysis, traffic-law retrieval, and reasoning. If a model stage fails, the page shows its actual error and never substitutes demo results.
+
+After restarting the backend, `http://localhost:8000/api/health` includes `video_vlm` with the selected backend, model, and Python module. For local video analysis, expect `backend: "local"`, `model: "Qwen/Qwen2-VL-7B-Instruct"`, and `module: "src.VLM.analyze_video"`. This reports configuration, not successful model loading. Existing reports are not recomputed automatically; upload a new video or rerun its analysis.
 
 ## Run components directly
 

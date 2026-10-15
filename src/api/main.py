@@ -104,9 +104,12 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     @app.get("/api/health", tags=["health"])
     def health():
+        from .services.vlm_service import backend_info
+
         return {"status": "ok", "version": settings.api_version,
                 "pipeline": {name: "demo" if getattr(settings, f"{name}_mock") else "real"
-                             for name in ("tracking", "vlm", "rag", "reasoning")}}
+                             for name in ("tracking", "vlm", "rag", "reasoning")},
+                "video_vlm": backend_info(settings)}
 
     return app
 
