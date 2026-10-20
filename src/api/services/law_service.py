@@ -1,13 +1,16 @@
 """Law retrieval service — wraps src/rag/retrieval/report_retrieval.py.
 
-Provides two public functions:
+Provides three public functions:
 
+* :func:`list_laws` — enumerate the full law corpus for browsing, with
+  category/article filters, facet counts, and pagination.
 * :func:`retrieve_laws` — perform a semantic search over the traffic-law
   corpus and return relevant law entries.
 * :func:`get_law_by_id` — look up a single law entry by its section ID.
 
-When ``settings.rag_mock`` is ``True`` both functions use the hard-coded
-:data:`_MOCK_LAWS` list so the API works without a built RAG index.
+When ``settings.rag_mock`` is ``True`` the search and lookup functions use
+the hard-coded :data:`_MOCK_LAWS` list so the API works without a built RAG
+index.  Browsing always reads the corpus files, never mock data.
 """
 from pathlib import Path
 
@@ -56,7 +59,101 @@ _MOCK_LAWS_INDEX: dict[str, dict] = {item["section_id"]: item for item in _MOCK_
 """Dict index for O(1) mock-law lookup by section ID."""
 
 
-def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
+def _section_sort_key(section: str):
+    """Natural-sort key for section numbers such as ``"1111-c-1"``.
+
+    Splits the section on ``"-"`` and orders numeric tokens before letter
+    suffixes, so ``1111`` sorts before ``1111-a`` and ``1111-c`` before
+    ``1111-c-1``.
+
+    Args:
+        section: Raw section number string from the corpus (e.g. ``"1144-a"``).
+
+    Returns:
+        list[tuple[int, int, str]]: Sortable key of per-token tuples.
+    """
+    key = []
+    for token in str(section).split("-"):
+        key.append((0, int(token), "") if token.isdigit() else (1, 0, token))
+    return key
+
+
+def _parent_to_entry(item: dict) -> dict:
+    """Convert a ``parents.json`` record into the API entry shape.
+
+    Args:
+        item: One parent-section record from ``parents.json``.
+
+    Returns:
+        dict: Keys ``section_id``, ``title``, ``content``, ``score`` and
+        ``metadata`` (everything except the core fields).
+    """
+    return {
+        "section_id": item.get("id", ""),
+        "title": item.get("title", ""),
+        "content": item.get("text", ""),
+        "score": 0.0,
+        "metadata": {k: v for k, v in item.items() if k not in {"id", "title", "text"}},
+    }
+
+
+def list_laws(out_dir: str, category: str = "", article: str = "",
+              limit: int = 50, offset: int = 0) -> tuple[list[dict], int, dict]:
+    """Enumerate the law corpus for the browsable Traffic Laws Library.
+
+    Loads ``parents.json`` directly — no embedding model, BM25 index, or
+    reranker is touched, so this stays fast even on the first request.
+
+    Args:
+        out_dir: Directory holding ``parents.json`` and ``children.jsonl``.
+        category: Optional exact category filter (e.g. ``"core"``).
+        article: Optional exact article-number filter (e.g. ``"24"``).
+        limit: Maximum number of entries to return.
+        offset: Number of matching entries to skip (pagination).
+
+    Returns:
+        tuple[list[dict], int, dict]: A 3-tuple of:
+            - the paginated entries in article/section order, in the same
+              shape as :func:`get_law_by_id` returns;
+            - the total number of matches before slicing;
+            - facet counts ``{"categories": {...}, "articles": {...}}``
+              computed over the full corpus.
+
+    Raises:
+        RuntimeError: If the corpus files are missing or empty.
+    """
+    from src.rag.retrieval.index_and_retrieve import load
+    try:
+        parents, _ = load(Path(out_dir))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Traffic-law listing failed: {exc}") from exc
+
+    ordered = sorted(
+        parents.values(),
+        key=lambda item: (int(item.get("article") or 0),
+                          _section_sort_key(item.get("section") or "")),
+    )
+
+    categories: dict[str, int] = {}
+    articles: dict[str, int] = {}
+    for item in ordered:
+        cat = str(item.get("category") or "")
+        art = str(item.get("article") or "")
+        if cat:
+            categories[cat] = categories.get(cat, 0) + 1
+        if art:
+            articles[art] = articles.get(art, 0) + 1
+
+    filtered = [
+        item for item in ordered
+        if (not category or str(item.get("category") or "") == category)
+        and (not article or str(item.get("article") or "") == str(article))
+    ]
+    page = [_parent_to_entry(item) for item in filtered[offset:offset + limit]]
+    return page, len(filtered), {"categories": categories, "articles": articles}
+
+
+def retrieve_laws(description: str, out_dir: str, settings, rerank: bool | None = None) -> list[dict]:
     """Retrieve relevant traffic laws for the given accident description.
 
     In mock mode returns :data:`_MOCK_LAWS` directly.  In real mode calls
@@ -70,6 +167,9 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
         settings: Application settings. ``settings.rag_mock``,
             ``settings.rag_rerank``, and ``settings.rag_mode`` are
             consulted.
+        rerank: Overrides ``settings.rag_rerank`` when given.  Interactive
+            callers pass ``False`` because the cross-encoder costs seconds
+            per query on CPU; pipeline callers keep the setting default.
 
     Returns:
         A list of dicts with keys ``section_id``, ``title``, ``content``,
@@ -81,6 +181,7 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
     """
     if settings.rag_mock:
         return _MOCK_LAWS
+    use_rerank = settings.rag_rerank if rerank is None else rerank
 
     try:
         from src.rag.chunking.query_expansion import expand_queries
@@ -97,7 +198,7 @@ def retrieve_laws(description: str, out_dir: str, settings) -> list[dict]:
             out=Path(out_dir),   # ensure Path, not string
             extra_queries=extra_queries,
             top_k=5,
-            rerank=settings.rag_rerank,
+            rerank=use_rerank,
             mode=settings.rag_mode,
             return_details=False,
         )

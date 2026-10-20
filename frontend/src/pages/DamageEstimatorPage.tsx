@@ -7,9 +7,11 @@ import { LoadingState } from '@/components/common/LoadingState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { ImageUploader } from '@/components/upload/ImageUploader';
 import { DamageAssessment } from '@/components/damage/DamageAssessment';
+import { SegmentationResults } from '@/components/damage/SegmentationResults';
 import { RepairCostBreakdown } from '@/components/damage/RepairCostBreakdown';
 import { uploadDamageImages } from '@/services/damageService';
 import { exportElementToPDF } from '@/utils/pdfExport';
+import { formatNumber } from '@/utils/format';
 import type { DamageAssessmentRecord, VehicleInfo } from '@/types/damage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -356,6 +358,8 @@ export function DamageEstimatorPage() {
           );
         return (
           <div className="space-y-6 max-w-3xl">
+            {/* Visual segmentation output — part masks, damage masks, combined */}
+            <SegmentationResults record={record} />
             <DamageAssessment record={record} />
             <div className="flex justify-between">
               <Button variant="outline" onClick={goPrev}>Back</Button>
@@ -426,12 +430,14 @@ export function DamageEstimatorPage() {
                       <dt className="text-slate-400">Color</dt>
                       <dd className="text-slate-100">{record.vehicleInfo.color}</dd>
                     </div>
-                    {record.vehicleInfo.mileage !== undefined && (
-                      <div>
-                        <dt className="text-slate-400">Mileage</dt>
-                        <dd className="text-slate-100">{record.vehicleInfo.mileage.toLocaleString()} km</dd>
-                      </div>
-                    )}
+                    <div>
+                      <dt className="text-slate-400">Mileage</dt>
+                      <dd className="text-slate-100">
+                        {record.vehicleInfo.mileage != null
+                          ? `${formatNumber(record.vehicleInfo.mileage)} km`
+                          : 'N/A'}
+                      </dd>
+                    </div>
                     {record.vehicleInfo.repairLocation && (
                       <div>
                         <dt className="text-slate-400">Repair Location</dt>
@@ -468,6 +474,9 @@ export function DamageEstimatorPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Segmentation overlays from the CV models */}
+              <SegmentationResults record={record} />
 
               {/* Damage summary */}
               <Card>
@@ -513,31 +522,35 @@ export function DamageEstimatorPage() {
                     <div className="rounded-lg bg-[#0d1525] border border-[#1e2d45] p-4 text-center">
                       <p className="text-xs text-slate-400 mb-1">Total Estimate</p>
                       <p className="text-2xl font-bold text-primary">
-                        ${record.estimate.total.toLocaleString()}
+                        {record.estimate.total != null
+                          ? `$${formatNumber(record.estimate.total)}`
+                          : 'N/A'}
                       </p>
                     </div>
                     <div className="rounded-lg bg-[#0d1525] border border-[#1e2d45] p-4 text-center">
                       <p className="text-xs text-slate-400 mb-1">Estimate Range</p>
                       <p className="text-lg font-semibold text-slate-200">
-                        ${record.estimate.lowEstimate.toLocaleString()} –{' '}
-                        ${record.estimate.highEstimate.toLocaleString()}
+                        {record.estimate.lowEstimate != null &&
+                        record.estimate.highEstimate != null
+                          ? `$${formatNumber(record.estimate.lowEstimate)} – $${formatNumber(record.estimate.highEstimate)}`
+                          : 'N/A'}
                       </p>
                     </div>
                   </div>
-                  {record.estimate.egpEquivalent !== undefined && (
+                  {record.estimate.egpEquivalent != null && (
                     <p className="text-xs text-slate-500 text-center">
-                      ≈ EGP {record.estimate.egpEquivalent.toLocaleString()} (demo rate)
+                      ≈ EGP {formatNumber(record.estimate.egpEquivalent)} (demo rate)
                     </p>
                   )}
                 </CardContent>
               </Card>
 
               {/* Limitations */}
-              {record.estimate.limitations.length > 0 && (
+              {(record.estimate.limitations ?? []).length > 0 && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
                   <p className="text-xs font-semibold text-amber-400 mb-2">Limitations</p>
                   <ul className="space-y-1">
-                    {record.estimate.limitations.map((l, i) => (
+                    {(record.estimate.limitations ?? []).map((l, i) => (
                       <li key={i} className="text-xs text-amber-300 flex gap-2">
                         <span className="shrink-0">•</span>
                         {l}

@@ -7,7 +7,8 @@ for backward compatibility.
 Endpoint overview:
     POST   /upload                   Upload images and run assessment immediately.
     GET    /                         List all assessments.
-    GET    /images/{id}/{filename}   Serve a stored damage image.
+    GET    /images/{id}/{filename}   Serve a stored damage image or a
+                                      segmentation overlay (``segmentation/``).
     GET    /{id}                     Fetch a single assessment.
     POST   /{id}/corrections         Apply user corrections to detected parts.
     DELETE /{id}                     Delete an assessment.
@@ -132,10 +133,25 @@ def _format_damage_record(record: dict) -> dict:
         "highEstimate": float(cost_report.get("total_max") or subtotal * 1.25),
         "currency": currency,
         "assumptions": ["Standard OEM parts and labor rates applied"],
-        "limitations": cost_report.get("notes", []),
+        "limitations": cost_report.get("notes") or [],
     }
 
     images = record.get("images", [])
+
+    # Segmentation overlays written by car_damage_cost.viz.save_debug —
+    # stored as filesystem paths, served as /api/damage/images/<id>/...
+    segmentation_images: list[dict] = []
+    for entry in (cost_report.get("segmentation_images") or []):
+        views = {
+            view: f"/api/damage/images/{record['id']}/segmentation/{Path(path).name}"
+            for view in ("parts", "damage", "combined")
+            if (path := entry.get(view))
+        }
+        if views:
+            segmentation_images.append({
+                "photo": Path(str(entry.get("photo") or "")).name,
+                **views,
+            })
 
     return {
         "id": record["id"],
@@ -150,6 +166,7 @@ def _format_damage_record(record: dict) -> dict:
             "repairLocation": vinfo.get("repair_location", ""),
         },
         "imageUrls": images,
+        "segmentationImages": segmentation_images,
         "damagedParts": damaged_parts,
         "repairItems": repair_items,
         "estimate": estimate,
@@ -313,6 +330,11 @@ async def upload_and_assess_damage(
             ],
             "notes": [f"Processed with fallback: {exc}"],
             "unpriced": [],
+            # Overlays written during analysis survive a later pricing
+            # failure — surface the real files, never fabricate any.
+            "segmentation_images": damage_service.collect_segmentation_images(
+                saved_paths, assessment_id
+            ),
         }
 
     initial_record = {
@@ -349,25 +371,35 @@ def list_damage_assessments(settings=Depends(get_settings)):
 
 @router.get("/images/{assessment_id}/{filename:path}")
 def serve_damage_image(assessment_id: str, filename: str):
-    """Serve uploaded damage images securely.
+    """Serve uploaded damage images and segmentation overlay images.
 
-    Resolves the path and verifies it is within the ``out/damage`` directory
-    to prevent path traversal attacks.
+    Accepts either a bare filename (files in ``out/damage/<id>/images``) or a
+    single-level subdirectory path such as ``segmentation/<file>`` (overlays
+    written by the damage pipeline). The resolved path must stay inside the
+    assessment's own ``out/damage/<id>`` directory to prevent traversal.
 
     Args:
         assessment_id: Assessment identifier used as the subdirectory name.
-        filename: Image filename (path component after the assessment ID).
+        filename: Image filename, optionally prefixed with ``images/`` or
+            ``segmentation/``.
 
     Returns:
         A :class:`~fastapi.responses.FileResponse` streaming the image.
 
     Raises:
-        :class:`~fastapi.HTTPException` 403: Path outside allowed root.
+        :class:`~fastapi.HTTPException` 403: Path outside allowed root or
+            unknown subdirectory.
         :class:`~fastapi.HTTPException` 404: Image not found.
     """
-    safe_name = Path(filename).name
-    image_path = (Path("out") / "damage" / assessment_id / "images" / safe_name).resolve()
-    allowed_root = (Path("out") / "damage").resolve()
+    parts = Path(filename).parts
+    if len(parts) == 1:
+        parts = ("images", parts[0])
+    if (len(parts) != 2 or ".." in parts
+            or parts[0] not in {"images", "segmentation"}):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    allowed_root = (Path("out") / "damage" / assessment_id).resolve()
+    image_path = (allowed_root / parts[0] / parts[1]).resolve()
 
     try:
         image_path.relative_to(allowed_root)

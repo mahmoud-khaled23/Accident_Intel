@@ -141,9 +141,17 @@ class Config:
         c.vlm_severity = os.getenv("VLM_SEVERITY", "0") == "1"
         c.vlm_quality_check = os.getenv("VLM_QUALITY_CHECK", "1") == "1"
 
+        package_root = Path(__file__).resolve().parent
         for attr in ("damage_weights", "parts_weights", "prices_path", "price_cache_path"):
             value = Path(getattr(c, attr).replace("\\", "/")).expanduser()
             if not value.is_absolute():
-                value = PROJECT_ROOT / value
+                # Candidate locations: the repo root (weights/, data/) and
+                # this package's own directory — e.g. the price tables ship
+                # at src/car_damage_cost/data/prices.json while weights live
+                # at the repo root. Pick the first candidate that exists so
+                # the module works from any entry point.
+                candidates = (PROJECT_ROOT / value, package_root / value)
+                existing = next((p for p in candidates if p.exists()), None)
+                value = existing if existing is not None else PROJECT_ROOT / value
             setattr(c, attr, str(value.resolve()))
         return c

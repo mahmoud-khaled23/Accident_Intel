@@ -51,8 +51,12 @@ client.interceptors.response.use(
 // ---------------------------------------------------------------------------
 
 /** GET request — returns unwrapped response data */
-export async function get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-  const response = await client.get<T>(url, { params });
+export async function get<T>(
+  url: string,
+  params?: Record<string, unknown>,
+  config?: { timeout?: number },
+): Promise<T> {
+  const response = await client.get<T>(url, { params, ...config });
   return response.data;
 }
 

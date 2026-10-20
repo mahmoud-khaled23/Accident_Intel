@@ -5,6 +5,41 @@ full car-damage detection and cost-estimation pipeline.
 
 Imports are package-qualified to avoid collisions with API schemas.
 """
+from pathlib import Path
+
+# Debug-overlay views written by car_damage_cost.viz.save_debug, in the order
+# they are surfaced to the UI: part masks, damage masks, and the combined view.
+_SEG_VIEWS = ("parts", "damage", "combined")
+
+
+def collect_segmentation_images(
+    image_paths: list[str],
+    assessment_id: str,
+) -> list[dict]:
+    """Locate the mask overlays written by :func:`car_damage_cost.viz.save_debug`.
+
+    Args:
+        image_paths: Uploaded photo paths, in pipeline order.
+        assessment_id: Assessment whose ``segmentation/`` directory is searched.
+
+    Returns:
+        One entry per photo that has at least one overlay file on disk (photos
+        the pipeline skipped — e.g. unreadable ones — are omitted). Each entry
+        maps ``photo`` (the original filename) plus whichever of ``parts``,
+        ``damage``, and ``combined`` views exist to their filesystem paths.
+    """
+    debug_dir = Path("out") / "damage" / assessment_id / "segmentation"
+    images: list[dict] = []
+    for image_path in image_paths:
+        stem = Path(image_path).stem
+        views = {
+            view: str(debug_dir / f"{stem}_{view}.jpg")
+            for view in _SEG_VIEWS
+            if (debug_dir / f"{stem}_{view}.jpg").is_file()
+        }
+        if views:
+            images.append({"photo": Path(image_path).name, **views})
+    return images
 
 def run_damage_assessment(
     image_paths: list[str],
@@ -33,7 +68,10 @@ def run_damage_assessment(
 
     Returns:
         A dict with keys ``car_info``, ``total_min``, ``total_max``,
-        ``currency``, ``lines``, ``notes``, and ``unpriced``.
+        ``currency``, ``lines``, ``notes``, ``unpriced``, and
+        ``segmentation_images`` — per-photo paths of the mask overlays
+        written by :func:`car_damage_cost.viz.save_debug` so the UI can
+        display what the segmentation models found.
     """
     if settings.damage_mock:
         return {
@@ -74,6 +112,7 @@ def run_damage_assessment(
             ],
             "notes": ["Mock damage assessment — DAMAGE_MOCK=true"],
             "unpriced": [],
+            "segmentation_images": [],
         }
 
     # Real mode — import heavy modules inside the function
@@ -99,6 +138,10 @@ def run_damage_assessment(
     damage_model = YoloSegWrapper(cfg.damage_weights)
     parts_model = YoloSegWrapper(cfg.parts_weights)
 
+    # Mask overlays land next to the assessment's stored uploads so the API
+    # image endpoint can serve them (same out/damage/<id>/ tree as the router).
+    debug_dir = Path("out") / "damage" / assessment_id / "segmentation"
+
     try:
         report = analyze_case(
             paths=image_paths,
@@ -107,6 +150,7 @@ def run_damage_assessment(
             vlm=None,
             cfg=cfg,
             case_id=assessment_id,
+            debug_dir=debug_dir,
         )
 
         car = CarInfo(
@@ -128,6 +172,10 @@ def run_damage_assessment(
     except Exception as exc:
         raise RuntimeError(f"Damage analysis failed: {exc}") from exc
 
+    # Collect the overlays save_debug actually wrote (unreadable photos are
+    # skipped by the pipeline, so check existence rather than assume).
+    segmentation_images = collect_segmentation_images(image_paths, assessment_id)
+
     return {
         "car_info": {
             "make": vehicle_info.get("make"),
@@ -141,4 +189,5 @@ def run_damage_assessment(
         "lines": cost_dict.get("lines", []),
         "notes": warnings,
         "unpriced": cost_dict.get("unpriced", []),
+        "segmentation_images": segmentation_images,
     }
