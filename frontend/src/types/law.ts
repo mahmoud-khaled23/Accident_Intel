@@ -5,7 +5,7 @@ export interface TrafficLaw {
   id: string;
   title: string;
   jurisdiction: string; // e.g. "NYC", "New York State"
-  section: string; // e.g. "SAMPLE-VTL-1140"
+  section: string; // e.g. "VTL-1140"
   excerpt: string; // short quotable passage
   fullText: string; // complete text of the provision
   whyApplies?: string; // AI-generated explanation of relevance to the accident
@@ -13,6 +13,8 @@ export interface TrafficLaw {
   effectiveDate?: string; // ISO 8601 date string
   relevanceScore?: number; // 0–1, returned by RAG retrieval
   topics: string[]; // e.g. ["right-of-way", "intersection"]
+  article?: string; // VTL article number, e.g. "24"
+  category?: string; // corpus category, e.g. "core", "enforcement_program"
   isDemoData?: boolean;
 }
 
@@ -33,4 +35,17 @@ export interface LawSearchResult {
   law: TrafficLaw;
   matchScore: number; // 0–1
   matchedFields: string[]; // which fields matched the query
+}
+
+/** Facet counts over the full law corpus (browse responses) */
+export interface LawFacets {
+  categories: Record<string, number>;
+  articles: Record<string, number>;
+}
+
+/** One page of browse/search results from the laws API */
+export interface LawSearchPage {
+  results: LawSearchResult[];
+  total: number; // total matches before pagination slicing
+  facets?: LawFacets;
 }

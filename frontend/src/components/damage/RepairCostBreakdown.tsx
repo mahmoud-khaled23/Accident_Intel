@@ -32,7 +32,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   tax: 'Tax',
 };
 
-function formatCurrency(amount: number, currency: string = 'USD'): string {
+/**
+ * Currency display that never misrepresents unknown amounts as zero.
+ * Null/undefined/non-finite values render as "N/A".
+ */
+function formatCurrency(
+  amount: number | null | undefined,
+  currency: string = 'USD',
+): string {
+  if (amount == null || !Number.isFinite(amount)) return 'N/A';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -43,9 +51,13 @@ function formatCurrency(amount: number, currency: string = 'USD'): string {
 export function RepairCostBreakdown({ record }: RepairCostBreakdownProps) {
   const { repairItems, estimate } = record;
 
-  // Derive per-category totals for chart
+  // Derive per-category totals for chart. Line items with unknown (null /
+  // non-finite) totals are excluded from the aggregation — they still appear
+  // in the itemized table below, rendered as "N/A".
   const categoryTotals = repairItems.reduce<Record<string, number>>((acc, item) => {
-    acc[item.category] = (acc[item.category] ?? 0) + item.total;
+    if (Number.isFinite(item.total)) {
+      acc[item.category] = (acc[item.category] ?? 0) + item.total;
+    }
     return acc;
   }, {});
 
@@ -185,10 +197,12 @@ export function RepairCostBreakdown({ record }: RepairCostBreakdownProps) {
           <div className="flex justify-between text-sm">
             <span className="text-slate-400">Estimate Range</span>
             <span className="text-slate-300 font-mono">
-              {formatCurrency(estimate.lowEstimate)} – {formatCurrency(estimate.highEstimate)}
+              {estimate.lowEstimate != null && estimate.highEstimate != null
+                ? `${formatCurrency(estimate.lowEstimate)} – ${formatCurrency(estimate.highEstimate)}`
+                : 'N/A'}
             </span>
           </div>
-          {estimate.egpEquivalent !== undefined && (
+          {estimate.egpEquivalent != null && (
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">EGP Equivalent</span>
               <span className="text-slate-300 font-mono">
