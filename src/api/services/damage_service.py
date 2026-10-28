@@ -153,6 +153,37 @@ def run_damage_assessment(
             debug_dir=debug_dir,
         )
 
+        try:
+            from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+            record_usage(
+                model_id="damage_segmentation",
+                stage="damage_segmentation",
+                prompt_tokens=0,
+                completion_tokens=0,
+                cost_usd=0.0,
+                job_id=str(assessment_id) if assessment_id else None,
+            )
+        except Exception as exc:
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning(
+                "model_cost: instrumentation skipped: %s", exc
+            )
+        try:
+            from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+            record_usage(
+                model_id="parts_segmentation",
+                stage="parts_segmentation",
+                prompt_tokens=0,
+                completion_tokens=0,
+                cost_usd=0.0,
+                job_id=str(assessment_id) if assessment_id else None,
+            )
+        except Exception as exc:
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning(
+                "model_cost: instrumentation skipped: %s", exc
+            )
+
         car = CarInfo(
             make=vehicle_info.get("make", ""),
             model=vehicle_info.get("model", ""),

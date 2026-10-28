@@ -278,6 +278,32 @@ class PriceAgent:
                     contents=prompt,
                     config={"temperature": 0},
                 )
+                try:
+                    from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+                    usage_meta = getattr(resp, "usage_metadata", None)
+                    if usage_meta is not None:
+                        pt = getattr(usage_meta, "prompt_token_count", None) or 0
+                        ct = getattr(usage_meta, "candidates_token_count", None) or 0
+                    else:
+                        try:
+                            counted = self.client.models.count_tokens(
+                                model=self.model, contents=prompt
+                            )
+                            pt = getattr(counted, "total_tokens", None) or len(prompt) // 4
+                        except Exception:
+                            pt = len(prompt) // 4
+                        ct = len(resp.text or "") // 4
+                    record_usage(
+                        model_id=self.model,
+                        stage="price_agent",
+                        prompt_tokens=pt,
+                        completion_tokens=ct,
+                    )
+                except Exception as _exc:
+                    import logging  # noqa: PLC0415
+                    logging.getLogger(__name__).warning(
+                        "model_cost: instrumentation skipped: %s", _exc
+                    )
                 return resp.text or ""
             except Exception as e:
                 msg = str(e)

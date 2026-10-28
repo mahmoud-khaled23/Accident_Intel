@@ -370,6 +370,7 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
     n_chunks = max(rerank_pool, top_k * 5) if rerank else max(k_children, top_k * 3)
 
     ranked_lists = []
+    _reranker_tokens = 0  # accumulated across queries for cost recording
     for q in queries:
         dense_ids, dense_dist = [], {}
         if use_dense:
@@ -402,6 +403,14 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
         if reranker and cand_ids:                  # lower value = better, so negate the score
             docs = [child_by_id[cid]["text"] for cid in cand_ids]
             values = {cid: -float(s) for cid, s in zip(cand_ids, reranker.predict([(q, d) for d in docs]))}
+            # Accumulate reranker token counts: cross-encoder encodes (query, doc) together
+            try:
+                from src.api.model_cost.tokens import count_tokens as _count_tokens  # noqa: PLC0415
+                _reranker_tokens += _count_tokens(RERANKER_NAME, q)
+                for _d in docs:
+                    _reranker_tokens += _count_tokens(RERANKER_NAME, _d)
+            except Exception:
+                pass
         else:
             values = {cid: base[cid] for cid in cand_ids}
 
@@ -427,6 +436,34 @@ def retrieve(queries, out, top_k=5, per_query=None, expand_refs=False, refs_from
     else:
         kind = "distance (lower=better)"
     flip = reranker is not None or mode in ("hybrid", "bm25")   # these were stored negated
+
+    # --- record token usage for embedding and reranker models ---
+    try:
+        from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+        from src.api.model_cost.tokens import count_tokens  # noqa: PLC0415
+        if use_dense:
+            embed_tokens = sum(count_tokens(MODEL_NAME, q) for q in queries)
+            record_usage(
+                model_id=MODEL_NAME,
+                stage="rag_embeddings",
+                prompt_tokens=embed_tokens,
+                completion_tokens=0,
+            )
+        if reranker:
+            # _reranker_tokens was accumulated inside the per-query loop above,
+            # counting both query and document tokens for each (q, doc) pair.
+            record_usage(
+                model_id=RERANKER_NAME,
+                stage="rag_reranker",
+                prompt_tokens=_reranker_tokens,
+                completion_tokens=0,
+            )
+    except Exception as _exc:
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).warning(
+            "model_cost: instrumentation skipped: %s", _exc
+        )
+    # --- end token recording ---
 
     results = []
     for pid, matched, val in merge_rankings(ranked_lists, queries, top_k):

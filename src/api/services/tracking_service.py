@@ -96,6 +96,24 @@ def run_tracking(
     metadata = inspect_video(video_path)
     raw = process_video(video_path, output_video, output_json, model_path=model_path)
 
+    try:
+        from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+        from pathlib import Path as _Path  # noqa: PLC0415
+        tracking_model_id = _Path(model_path).stem
+        record_usage(
+            model_id=tracking_model_id,
+            stage="vehicle_tracking",
+            prompt_tokens=0,
+            completion_tokens=0,
+            cost_usd=0.0,
+            job_id=str(accident_id) if accident_id else None,
+        )
+    except Exception as exc:
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).warning(
+            "model_cost: instrumentation skipped: %s", exc
+        )
+
     for info in raw.values():
         for fdata in info.get("trajectory", {}).values():
             box = fdata.get("box", [])
@@ -120,7 +138,6 @@ def run_tracking(
         "trajectories": trajectories,
         "accident_candidates": identify_accident_candidates(raw),
     }
-
 
 def summarize_tracking(data: dict) -> dict:
     """Compress tracking data to a size safe for an LLM context window.

@@ -81,4 +81,26 @@ def analyze_hosted(
             max_tokens=max_tokens,
             extra_body=extra_params or None,
         )
+    try:
+        from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            record_usage(
+                model_id=model,
+                stage="vlm_hosted",
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+            )
+        else:
+            record_usage(
+                model_id=model,
+                stage="vlm_hosted",
+                prompt_tokens=0,
+                completion_tokens=0,
+            )
+    except Exception as exc:
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).warning(
+            "model_cost: instrumentation skipped: %s", exc
+        )
     return response.choices[0].message.content or ""

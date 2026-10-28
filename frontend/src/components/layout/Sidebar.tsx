@@ -5,6 +5,7 @@ import {
   History,
   Wrench,
   BookOpen,
+  DollarSign,
   Settings,
   ShieldAlert,
   X,
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Analysis History', href: '/history', icon: History },
   { label: 'Damage Estimator', href: '/damage', icon: Wrench },
   { label: 'Traffic Laws', href: '/laws', icon: BookOpen },
+  { label: 'Cost Analysis', href: '/cost', icon: DollarSign },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];
 

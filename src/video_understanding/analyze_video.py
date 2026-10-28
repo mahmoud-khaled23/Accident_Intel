@@ -145,7 +145,7 @@ def build_prompt(args, duration_s: float) -> str:
     return TRAFFIC_ANALYSIS_PROMPT
 
 
-def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_new_tokens: int) -> str:
+def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_new_tokens: int, model_id: str = DEFAULT_MODEL_ID) -> str:
     """Run the Qwen2-VL model on a video and return the generated text report.
 
     Clamps ``n_frames`` to the actual frame count and rounds it down to an
@@ -210,6 +210,21 @@ def analyze(model, processor, video_path: str, prompt: str, n_frames: int, max_n
         generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
     trimmed = [out[len(inp):] for inp, out in zip(inputs.input_ids, generated_ids)]
+    try:
+        from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+        prompt_tok = inputs.input_ids.shape[1]
+        completion_tok = len(trimmed[0])
+        record_usage(
+            model_id=model_id,
+            stage="vlm_local",
+            prompt_tokens=prompt_tok,
+            completion_tokens=completion_tok,
+        )
+    except Exception as exc:
+        import logging  # noqa: PLC0415
+        logging.getLogger(__name__).warning(
+            "model_cost: instrumentation skipped: %s", exc
+        )
     return processor.batch_decode(
         trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )[0]

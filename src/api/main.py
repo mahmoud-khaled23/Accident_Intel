@@ -5,8 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import Settings
+from .model_cost.usage import init_model_usage
 from .models import init_db, recover_interrupted_analyses
 from .routers.accidents import router as accidents_router
+from .routers.cost import router as cost_router
 from .routers.damage import router as damage_router
 from .routers.laws import router as laws_router
 
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
 
     # Initialise the SQLite database
     init_db(str(settings.db_path))
+    init_model_usage(str(settings.db_path))
     recover_interrupted_analyses(str(settings.db_path))
 
     yield
@@ -76,6 +79,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(accidents_router)
+    app.include_router(cost_router)
     app.include_router(damage_router, prefix="/api/damage")
     app.include_router(damage_router, prefix="/api/damage-assessments")
     app.include_router(laws_router)

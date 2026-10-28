@@ -185,6 +185,22 @@ def analyze_accident(
             response_format={"type": "json_object"},
         )
         response_text = response.choices[0].message.content or ""
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                from src.api.model_cost.usage import record_usage  # noqa: PLC0415
+                record_usage(
+                    model_id=resolved_model,
+                    stage="reasoning",
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                    job_id=None,
+                )
+        except Exception as exc:
+            import logging  # noqa: PLC0415
+            logging.getLogger(__name__).warning(
+                "model_cost: instrumentation skipped: %s", exc
+            )
     except openai.AuthenticationError as exc:
         raise RuntimeError(
             "Reasoning API authentication failed. Verify OPENAI_API_KEY and OPENAI_BASE_URL "
