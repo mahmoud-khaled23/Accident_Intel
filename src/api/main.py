@@ -11,6 +11,7 @@ from .routers.accidents import router as accidents_router
 from .routers.cost import router as cost_router
 from .routers.damage import router as damage_router
 from .routers.laws import router as laws_router
+from .routers.evaluation import router as evaluation_router
 
 
 def _get_settings() -> Settings:
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(damage_router, prefix="/api/damage")
     app.include_router(damage_router, prefix="/api/damage-assessments")
     app.include_router(laws_router)
+    app.include_router(evaluation_router)
 
     @app.get("/health", tags=["health"])
     @app.get("/api/health", tags=["health"])

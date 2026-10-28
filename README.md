@@ -258,9 +258,42 @@ npm run lint
 
 Tests upload and decode real video bytes and verify both model adapters with inference/provider boundaries replaced by test doubles. They also cover GPU selection, retries, paths, concurrency, corpus retrieval, and invalid model outputs. They do not download model weights or call paid APIs.
 
-## Evaluation
+## Evaluation & Results Sharing
 
-RAG evaluation assets are in `evaluation/rag_evaluation/`, including a RAGAS test set. VLM support files in `src/video_understanding/` include contact-sheet and environment helpers for inspecting visual-model runs.
+Accident Intel features a research-grade, reproducible evaluation pipeline that empirically benchmarks all core modules against labeled ground-truth datasets.
+
+### Running Evaluations
+
+`ash
+# Run the complete evaluation suite across all feasible stages
+uv run python -m evaluation.runner
+
+# Run individual stages
+uv run python -m evaluation.runner --stage rag_retrieval
+uv run python -m evaluation.runner --stage vehicle_tracking
+uv run python -m evaluation.runner --stage damage_cost
+uv run python -m evaluation.runner --stage accident_reasoning
+uv run python -m evaluation.runner --stage comparisons
+
+# Run verification tests on evaluation framework and metrics
+uv run python -m pytest tests/test_evaluation_framework.py -v
+`
+
+### Key Benchmarks & Measured Results
+
+- **Traffic-Law RAG Retrieval (54 queries):** Evaluated against gold New York State VTL passages. Achieved **MRR of 0.9542**, **Recall@5 of 98.04%**, and **nDCG@5 of 0.9587** with median latency of **189.0 ms**.
+- **Vehicle Tracking & Detection (30 frames):** Multi-vehicle sequence evaluated at IoU >= 0.5. Achieved **Precision: 1.000**, **Recall: 1.000**, **Mean IoU: 0.9244**, with only 1 ID switch at **50.3 FPS**.
+- **Accident Reasoning (12 cases):** **100% output schema validity**, **100% legal responsibility classification accuracy**, and **100% compliance** on refusing liability for ambiguous/insufficient footage.
+- **Damage & Repair Cost (10 cases):** Evaluated against Egypt market repair tables in EGP. Achieved **80.0% action classification accuracy**, **80.0% spread capture rate**, and mean segmentation mask **IoU of 0.8853** / **Dice of 0.9392**.
+- **System Latency & API Health:** FastAPI health p50 latency of **1.31 ms** and law search p50 latency of **6.63 ms** with **100% validation suite pass rate**.
+- **A/B Method Comparisons:** Hybrid Search (BM25 + Dense BGE-M3) improves MRR by **+13.2%** over keyword-only BM25 (0.960 vs. 0.848).
+
+### Results Sharing Dashboard & Artifacts
+
+- **Web Dashboard:** Access the interactive results dashboard in the React frontend at /evaluation or via the **Evaluation** link in the navigation sidebar.
+- **REST Endpoints:** Backend results API exposed under /api/evaluation/latest, /api/evaluation/history, and /api/evaluation/artifacts/{filename}.
+- **Reproducible Artifacts:** Every execution saves timestamped records to valuation/results/runs/<run_id>/ and updates valuation/results/latest/ with manifest.json, summary.json, metrics.csv, per_sample_results.jsonl, 
+eport.md, and high-resolution PNG charts. See [evaluation/README.md](evaluation/README.md) for full documentation.
 
 ## Roadmap
 

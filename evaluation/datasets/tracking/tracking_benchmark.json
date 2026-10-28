@@ -1,0 +1,1031 @@
+{
+  "sequence_id": "seq_urban_cross_01",
+  "resolution": [
+    1024,
+    768
+  ],
+  "fps": 30.0,
+  "total_frames": 30,
+  "unique_tracks": 3,
+  "frames": [
+    {
+      "frame_id": 0,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            100.0,
+            200.0,
+            160.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            50.0,
+            380.0,
+            170.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 1,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            112.0,
+            200.5,
+            172.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            58.0,
+            380.0,
+            178.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 2,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            124.0,
+            201.0,
+            184.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            66.0,
+            380.0,
+            186.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 3,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            136.0,
+            200.0,
+            196.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            74.0,
+            380.0,
+            194.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 4,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            148.0,
+            200.5,
+            208.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            82.0,
+            380.0,
+            202.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 5,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            160.0,
+            201.0,
+            220.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            90.0,
+            380.0,
+            210.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 6,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            172.0,
+            200.0,
+            232.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            98.0,
+            380.0,
+            218.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 7,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            184.0,
+            200.5,
+            244.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            106.0,
+            380.0,
+            226.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 8,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            196.0,
+            201.0,
+            256.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            114.0,
+            380.0,
+            234.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            150.0,
+            180.0,
+            175.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 9,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            208.0,
+            200.0,
+            268.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            122.0,
+            380.0,
+            242.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            168.0,
+            180.0,
+            193.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 10,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            220.0,
+            200.5,
+            280.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            130.0,
+            380.0,
+            250.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            186.0,
+            180.0,
+            211.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 11,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            232.0,
+            201.0,
+            292.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            138.0,
+            380.0,
+            258.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            204.0,
+            180.0,
+            229.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 12,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            244.0,
+            200.0,
+            304.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            146.0,
+            380.0,
+            266.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            222.0,
+            180.0,
+            247.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 13,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            256.0,
+            200.5,
+            316.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            154.0,
+            380.0,
+            274.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            240.0,
+            180.0,
+            265.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 14,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            268.0,
+            201.0,
+            328.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            162.0,
+            380.0,
+            282.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            258.0,
+            180.0,
+            283.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 15,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            280.0,
+            200.0,
+            340.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            170.0,
+            380.0,
+            290.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            276.0,
+            180.0,
+            301.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 16,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            292.0,
+            200.5,
+            352.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            178.0,
+            380.0,
+            298.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            294.0,
+            180.0,
+            319.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 17,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            304.0,
+            201.0,
+            364.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            186.0,
+            380.0,
+            306.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            312.0,
+            180.0,
+            337.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 18,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            316.0,
+            200.0,
+            376.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            194.0,
+            380.0,
+            314.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            330.0,
+            180.0,
+            355.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 19,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            328.0,
+            200.5,
+            388.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            202.0,
+            380.0,
+            322.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            348.0,
+            180.0,
+            373.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 20,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            340.0,
+            201.0,
+            400.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            210.0,
+            380.0,
+            330.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            366.0,
+            180.0,
+            391.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 21,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            352.0,
+            200.0,
+            412.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            218.0,
+            380.0,
+            338.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            384.0,
+            180.0,
+            409.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 22,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            364.0,
+            200.5,
+            424.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            226.0,
+            380.0,
+            346.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            402.0,
+            180.0,
+            427.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 23,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            376.0,
+            201.0,
+            436.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            234.0,
+            380.0,
+            354.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            420.0,
+            180.0,
+            445.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 24,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            388.0,
+            200.0,
+            448.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            242.0,
+            380.0,
+            362.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            438.0,
+            180.0,
+            463.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 25,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            400.0,
+            200.5,
+            460.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            250.0,
+            380.0,
+            370.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            456.0,
+            180.0,
+            481.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 26,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            412.0,
+            201.0,
+            472.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            258.0,
+            380.0,
+            378.0
+          ]
+        },
+        {
+          "track_id": 3,
+          "class_id": 3,
+          "class_name": "motorcycle",
+          "bbox": [
+            474.0,
+            180.0,
+            499.0,
+            220.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 27,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            424.0,
+            200.0,
+            484.0,
+            235.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            266.0,
+            380.0,
+            386.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 28,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            436.0,
+            200.5,
+            496.0,
+            235.5
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            274.0,
+            380.0,
+            394.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame_id": 29,
+      "boxes": [
+        {
+          "track_id": 1,
+          "class_id": 2,
+          "class_name": "car",
+          "bbox": [
+            448.0,
+            201.0,
+            508.0,
+            236.0
+          ]
+        },
+        {
+          "track_id": 2,
+          "class_id": 7,
+          "class_name": "truck",
+          "bbox": [
+            300.0,
+            282.0,
+            380.0,
+            402.0
+          ]
+        }
+      ]
+    }
+  ]
+}

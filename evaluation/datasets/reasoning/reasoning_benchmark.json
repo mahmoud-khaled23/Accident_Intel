@@ -1,0 +1,230 @@
+[
+  {
+    "case_id": "RSN-001-REAREND",
+    "description": "A silver sedan traveling in the center lane slowed down and activated its brake lights due to traffic ahead. A following dark blue sedan traveling directly behind failed to reduce its speed and struck the rear bumper of the lead silver sedan. The collision occurred entirely within the center lane.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "silver", "role": "lead_vehicle", "avg_speed_px": 12.4},
+        {"id": 2, "class": "car", "color": "blue", "role": "trailing_vehicle", "avg_speed_px": 28.6}
+      ],
+      "collision_frame": 85,
+      "lane_deviations": 0
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1129", "section_id": "1129", "title": "Following too closely", "text": "The driver of a motor vehicle shall not follow another vehicle more closely than is reasonable and prudent, having due regard for the speed of such vehicles and the traffic upon and the condition of the highway."},
+      {"id": "VTL-1180", "section_id": "1180", "title": "Basic rule and maximum limits", "text": "No person shall drive a vehicle at a speed greater than is reasonable and prudent under the conditions and having regard to the actual and potential hazards then existing."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1129", "1180"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 2,
+    "user_context": {"claim": "Lead car brake checked me"}
+  },
+  {
+    "case_id": "RSN-002-REDLIGHT",
+    "description": "At a signalized four-way intersection, the East-West traffic-control signal displayed a steady red indication. A red sedan traveling Eastbound entered the intersection while the signal was red and collided with a white SUV that had entered lawfully on a steady green signal from the North.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 10, "class": "car", "color": "red", "direction": "eastbound", "speed_px": 34.0},
+        {"id": 11, "class": "suv", "color": "white", "direction": "southbound", "speed_px": 18.0}
+      ],
+      "signal_phase_recorded": "red_eastbound"
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1111", "section_id": "1111", "title": "Traffic-control signal indications", "text": "Traffic facing a steady circular red signal shall stop at a clearly marked stop line and remain standing until an indication to proceed is shown."},
+      {"id": "VTL-1110", "section_id": "1110", "title": "Obedience to traffic-control devices", "text": "Every person shall obey the instructions of any official traffic-control device applicable to him placed in accordance with the provisions of this chapter."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1111", "1110"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 10,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-003-LEFT-TURN",
+    "description": "A black sedan traveling Northbound made a left turn across opposing traffic to enter a commercial plaza driveway. A yellow motorcycle proceeding Southbound straight in the oncoming lane collided with the front right passenger corner of the turning black sedan.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 3, "class": "car", "color": "black", "action": "left_turn", "speed_px": 10.2},
+        {"id": 4, "class": "motorcycle", "color": "yellow", "action": "through", "speed_px": 25.1}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1141", "section_id": "1141", "title": "Vehicle turning left", "text": "The driver of a vehicle intending to turn to the left within an intersection or into an alley, private road, or driveway shall yield the right of way to any vehicle approaching from the opposite direction which is within the intersection or so close as to constitute an immediate hazard."},
+      {"id": "VTL-1163", "section_id": "1163", "title": "Turning movements and required signals", "text": "No person shall turn a vehicle to enter a private road or driveway unless and until such movement can be made with reasonable safety."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1141", "1163"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 3,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-004-LANE-CHANGE",
+    "description": "On a marked multi-lane arterial, a white delivery truck traveling in lane 3 initiated a lane change into lane 2 without signaling and sideswiped a gray sedan already occupying lane 2.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 5, "class": "truck", "lane": 3, "target_lane": 2},
+        {"id": 6, "class": "car", "lane": 2, "target_lane": 2}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1128", "section_id": "1128", "title": "Driving on roadways laned for traffic", "text": "A vehicle shall be driven as nearly as practicable entirely within a single lane and shall not be moved from such lane until the driver has first ascertained that such movement can be made with safety."},
+      {"id": "VTL-1163", "section_id": "1163", "title": "Turning movements and required signals", "text": "A signal of intention to turn right or left when required shall be given continuously during not less than the last one hundred feet traveled by the vehicle before turning."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1128", "1163"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 5,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-005-STOP-SIGN",
+    "description": "A green sedan approaching an intersection controlled by an official stop sign failed to come to a complete stop, rolled past the stop line at approximately 15 km/h, and entered into the path of a through-traveling municipal transit bus.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 7, "class": "car", "action": "failed_stop_at_sign"},
+        {"id": 8, "class": "bus", "action": "through_priority"}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1172", "section_id": "1172", "title": "Stop signs and yield signs", "text": "Except when directed to proceed by a police officer, every driver of a vehicle approaching a stop sign shall stop at a clearly marked stop line, but if none, then shall stop before entering the crosswalk on the near side of the intersection."},
+      {"id": "VTL-1142", "section_id": "1142", "title": "Vehicle entering stop or yield intersection", "text": "Except when directed to proceed by a police officer, every driver of a vehicle approaching a stop sign shall stop as required by section eleven hundred seventy-two and after having stopped shall yield the right of way to any vehicle which has entered the intersection from another highway or which is approaching so closely on said highway as to constitute an immediate hazard during the time when such driver is moving across or within the intersection."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1172", "1142"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 7,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-006-SHARED-RESPONSIBILITY-1",
+    "description": "A blue sedan made a left turn across traffic. The oncoming black sports car was observed traveling at an excessively high rate of speed significantly exceeding other traffic flow, and accelerated into the intersection during a yellow signal phase. Both contributed to the impact.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 21, "class": "car", "color": "blue", "action": "left_turn", "speed_px": 14.0},
+        {"id": 22, "class": "car", "color": "black", "action": "straight", "speed_px": 52.0}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1141", "section_id": "1141", "title": "Vehicle turning left", "text": "The driver of a vehicle intending to turn to the left within an intersection shall yield the right of way to any vehicle approaching from the opposite direction."},
+      {"id": "VTL-1180", "section_id": "1180", "title": "Basic rule and maximum limits", "text": "No person shall drive a vehicle at a speed greater than is reasonable and prudent under the conditions and having regard to the actual and potential hazards then existing."}
+    ],
+    "gold_level": "shared_responsibility",
+    "gold_sections": ["1141", "1180"],
+    "insufficient_evidence": false,
+    "expected_violator_id": null,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-007-SHARED-RESPONSIBILITY-2",
+    "description": "A silver pickup truck was backing out of a private driveway into moving traffic without observing approaching vehicles. An approaching red coupe in lane 1 was straddling the double yellow line in the center of the road and collided with the tailgate of the reversing pickup.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 31, "class": "truck", "action": "backing_from_driveway"},
+        {"id": 32, "class": "car", "action": "straddling_double_yellow"}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1211", "section_id": "1211", "title": "Limitations on backing", "text": "The driver of a vehicle shall not back the same unless such movement can be made with safety and without interfering with other traffic."},
+      {"id": "VTL-1120", "section_id": "1120", "title": "Drive on right side of roadway", "text": "Upon all roadways of sufficient width a vehicle shall be driven upon the right half of the roadway."}
+    ],
+    "gold_level": "shared_responsibility",
+    "gold_sections": ["1211", "1120"],
+    "insufficient_evidence": false,
+    "expected_violator_id": null,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-008-INSUFFICIENT-SIGNAL-OBSCURED",
+    "description": "Two vehicles entered a four-way intersection from perpendicular directions and collided in the center. The overhead traffic signal head is completely obscured by tree branches and glare in the camera lens. No signal aspect can be visually determined for either direction.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 41, "class": "car", "direction": "north"},
+        {"id": 42, "class": "car", "direction": "west"}
+      ],
+      "signal_visibility": "completely_obscured"
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1111", "section_id": "1111", "title": "Traffic-control signal indications", "text": "Traffic facing green may proceed; traffic facing red must stop."},
+      {"id": "VTL-1140", "section_id": "1140", "title": "Vehicle approaching or entering intersection", "text": "The driver of a vehicle approaching an intersection shall yield the right of way to a vehicle which has entered the intersection from a different highway."}
+    ],
+    "gold_level": "insufficient_evidence",
+    "gold_sections": [],
+    "insufficient_evidence": true,
+    "expected_violator_id": null,
+    "user_context": {"notes": "The other driver told me his light was red"}
+  },
+  {
+    "case_id": "RSN-009-INSUFFICIENT-OFF-CAMERA-IMPACT",
+    "description": "CCTV camera footage shows a blue compact car driving past the bottom-right perimeter of the parking facility. Three seconds later, the car recoils backwards with a crushed fender, indicating an impact occurred beyond the visible frame boundary.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 51, "class": "car", "tracked_frames": 22, "exited_frame": true}
+      ],
+      "collision_coordinates": "outside_frame"
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1212", "section_id": "1212", "title": "Reckless driving", "text": "Reckless driving shall mean driving or using any motor vehicle in a manner which unreasonably endangers users of the public highway or any parking lot."}
+    ],
+    "gold_level": "insufficient_evidence",
+    "gold_sections": [],
+    "insufficient_evidence": true,
+    "expected_violator_id": null,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-010-INSUFFICIENT-BLURRY-NIGHT",
+    "description": "Severely degraded night footage with heavy digital artifacting and low frame rate (4 fps). Two unidentified vehicle silhouettes converge in an unlit intersection. Road markings, signal indicators, and vehicle positions cannot be reliably extracted.",
+    "tracking_summary": {
+      "vehicles": [],
+      "tracking_quality": "unreliable_low_confidence"
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1180", "section_id": "1180", "title": "Basic rule and maximum limits", "text": "No person shall drive a vehicle at a speed greater than is reasonable and prudent under the conditions."}
+    ],
+    "gold_level": "insufficient_evidence",
+    "gold_sections": [],
+    "insufficient_evidence": true,
+    "expected_violator_id": null,
+    "user_context": {}
+  },
+  {
+    "case_id": "RSN-011-UNVERIFIED-USER-CONTEXT-REJECTION",
+    "description": "A delivery van and a hatchback are stopped after an apparent minor scraping on a residential street. The video shows only the post-incident stationary vehicles with hazard lights on. No footage of movement or contact is captured.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 61, "class": "truck", "speed_px": 0.0},
+        {"id": 62, "class": "car", "speed_px": 0.0}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1128", "section_id": "1128", "title": "Driving on roadways laned for traffic", "text": "A vehicle shall be driven within a single lane."}
+    ],
+    "gold_level": "insufficient_evidence",
+    "gold_sections": [],
+    "insufficient_evidence": true,
+    "expected_violator_id": null,
+    "user_context": {"claim": "The delivery van hit me while parked, 100% their fault"}
+  },
+  {
+    "case_id": "RSN-012-RECKLESS-SPEED-CORNERING",
+    "description": "A sports sedan approached an urban roundabout at an excessively high rate of speed on wet asphalt. The vehicle lost traction, crossed over the central curb divider, and crashed head-on into a legally circulating taxicab.",
+    "tracking_summary": {
+      "vehicles": [
+        {"id": 71, "class": "car", "speed_px": 61.2, "trajectory": "loss_of_control"},
+        {"id": 72, "class": "car", "speed_px": 15.0, "trajectory": "in_lane"}
+      ]
+    },
+    "retrieved_laws": [
+      {"id": "VTL-1180", "section_id": "1180", "title": "Basic rule and maximum limits", "text": "No person shall drive a vehicle at a speed greater than is reasonable and prudent under the conditions and having regard to the actual and potential hazards then existing."},
+      {"id": "VTL-1212", "section_id": "1212", "title": "Reckless driving", "text": "Reckless driving shall mean driving or using any motor vehicle in a manner which unreasonably endangers users of the public highway."}
+    ],
+    "gold_level": "potential_responsibility",
+    "gold_sections": ["1180", "1212"],
+    "insufficient_evidence": false,
+    "expected_violator_id": 71,
+    "user_context": {}
+  }
+]
+

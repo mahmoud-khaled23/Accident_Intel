@@ -1,0 +1,334 @@
+[
+  {
+    "video_id": "clip_01_rear_end",
+    "clip_name": "highway_rear_end_rain",
+    "duration_sec": 14.0,
+    "fps": 30.0,
+    "environment": {
+      "weather": "rain",
+      "lighting": "daylight",
+      "road_surface": "wet"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "silver", "role": "lead_vehicle"},
+        {"id": 2, "class": "car", "color": "dark_blue", "role": "following_vehicle"}
+      ],
+      "events": [
+        {"event_type": "braking", "timestamp": 3.2, "description": "Lead silver sedan activates brake lights."},
+        {"event_type": "lane_keeping", "timestamp": 4.5, "description": "Both vehicles remain in center lane."},
+        {"event_type": "collision", "timestamp": 6.8, "description": "Blue sedan strikes rear bumper of silver sedan."},
+        {"event_type": "post_impact_stop", "timestamp": 9.4, "description": "Both vehicles come to rest on right shoulder."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 6.8,
+        "impact_type": "rear_end"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "uncontrolled_highway"
+      },
+      "unsupported_claims_to_check": [
+        "driver of blue car was texting on smartphone",
+        "blue car was traveling at exactly 85 mph",
+        "silver car driver intentionally brake checked the blue car"
+      ],
+      "required_visible_events": [
+        "silver car brake lights",
+        "rear-end collision",
+        "vehicles stop on shoulder"
+      ],
+      "reference_description": "A silver sedan traveling in the center lane slows down and activates brake lights at approximately 3.2 seconds. A following dark blue sedan fails to decelerate in time and collides with the rear bumper of the silver sedan at 6.8 seconds. Following impact, both vehicles steer toward the right shoulder and come to a complete stop."
+    }
+  },
+  {
+    "video_id": "clip_02_signal_tbone",
+    "clip_name": "urban_intersection_red_light",
+    "duration_sec": 16.0,
+    "fps": 25.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "daylight",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "suv", "color": "white", "role": "crossing_vehicle"},
+        {"id": 2, "class": "sedan", "color": "red", "role": "violating_vehicle"}
+      ],
+      "events": [
+        {"event_type": "traffic_light_change", "timestamp": 2.0, "description": "North-South signal transitions to steady green."},
+        {"event_type": "intersection_entry", "timestamp": 4.1, "description": "White SUV enters intersection on green indication."},
+        {"event_type": "collision", "timestamp": 5.7, "description": "Red sedan enters against red signal and strikes passenger side of white SUV."},
+        {"event_type": "spin_out", "timestamp": 7.2, "description": "White SUV rotates 90 degrees across pedestrian crossing."},
+        {"event_type": "post_impact_stop", "timestamp": 10.0, "description": "Both vehicles halt in southeast quadrant of intersection."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 5.7,
+        "impact_type": "side_impact"
+      },
+      "traffic_controls": {
+        "signal_visible": true,
+        "state_at_collision": "green_for_suv_red_for_sedan"
+      },
+      "unsupported_claims_to_check": [
+        "red car driver ran red light because of mechanical brake failure",
+        "white SUV driver saw the red car and sped up intentionally"
+      ],
+      "required_visible_events": [
+        "traffic signal visible",
+        "side-impact collision in intersection",
+        "white SUV entered on green"
+      ],
+      "reference_description": "At an urban signaled intersection, the North-South signal displays a steady green light. A white SUV enters the intersection lawfully. At 5.7 seconds, a red sedan traveling Eastbound enters against the steady red light and collides into the right side of the white SUV. The impact causes the white SUV to rotate clockwise before both vehicles come to rest."
+    }
+  },
+  {
+    "video_id": "clip_03_left_turn_yield",
+    "clip_name": "suburban_left_turn_failure",
+    "duration_sec": 12.0,
+    "fps": 30.0,
+    "environment": {
+      "weather": "overcast",
+      "lighting": "daylight",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "black", "role": "turning_vehicle"},
+        {"id": 2, "class": "motorcycle", "color": "yellow", "role": "oncoming_vehicle"}
+      ],
+      "events": [
+        {"event_type": "left_turn", "timestamp": 3.0, "description": "Black sedan initiates left turn across oncoming lanes."},
+        {"event_type": "braking", "timestamp": 4.2, "description": "Oncoming yellow motorcycle applies emergency brakes."},
+        {"event_type": "collision", "timestamp": 5.1, "description": "Motorcycle strikes front passenger corner of turning black sedan."},
+        {"event_type": "post_impact_stop", "timestamp": 7.5, "description": "Motorcycle rider separates; black sedan stops across opposing lane."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 5.1,
+        "impact_type": "angular_front_side"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "uncontrolled_midblock_turn"
+      },
+      "unsupported_claims_to_check": [
+        "motorcyclist was speeding at 90 mph",
+        "sedan driver was intoxicated"
+      ],
+      "required_visible_events": [
+        "black sedan turning left",
+        "oncoming motorcycle",
+        "angular collision at front passenger corner"
+      ],
+      "reference_description": "A black sedan turns left across oncoming traffic towards a commercial driveway. An oncoming yellow motorcycle proceeding straight is unable to stop in time and impacts the right front quarter of the turning sedan at 5.1 seconds."
+    }
+  },
+  {
+    "video_id": "clip_04_lane_change_sideswipe",
+    "clip_name": "multi_lane_arterial_sideswipe",
+    "duration_sec": 15.0,
+    "fps": 30.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "dusk",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "truck", "color": "white", "role": "changing_vehicle"},
+        {"id": 2, "class": "car", "color": "gray", "role": "straight_vehicle"}
+      ],
+      "events": [
+        {"event_type": "lane_change", "timestamp": 4.0, "description": "White delivery truck moves from right lane into middle lane."},
+        {"event_type": "collision", "timestamp": 5.8, "description": "Left side of truck contacts right side of adjacent gray sedan."},
+        {"event_type": "post_impact_stop", "timestamp": 11.0, "description": "Both vehicles pull forward and stop in right lane."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 5.8,
+        "impact_type": "sideswipe"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "marked_lanes"
+      },
+      "unsupported_claims_to_check": [
+        "truck driver had a blind spot mirror that was improperly adjusted",
+        "gray car driver accelerated to block the truck"
+      ],
+      "required_visible_events": [
+        "truck lane change",
+        "adjacent gray sedan",
+        "sideswipe contact between vehicles"
+      ],
+      "reference_description": "On a three-lane roadway, a white box truck changes lanes from lane 3 to lane 2 without clear clearance, making lateral sideswipe contact with the right side of a gray sedan already traveling in lane 2 at 5.8 seconds."
+    }
+  },
+  {
+    "video_id": "clip_05_stop_sign_roll",
+    "clip_name": "residential_stop_sign_intersection",
+    "duration_sec": 13.0,
+    "fps": 24.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "daylight",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "green", "role": "subordinate_vehicle"},
+        {"id": 2, "class": "bus", "color": "white_blue", "role": "through_vehicle"}
+      ],
+      "events": [
+        {"event_type": "deceleration", "timestamp": 2.5, "description": "Green sedan slows but does not achieve full stop at stop sign."},
+        {"event_type": "intersection_entry", "timestamp": 4.0, "description": "Green sedan rolls into two-way stop intersection."},
+        {"event_type": "collision", "timestamp": 5.5, "description": "Transit bus proceeding through cross-street collides with front of green sedan."},
+        {"event_type": "post_impact_stop", "timestamp": 8.0, "description": "Vehicles stop near northwest curb."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 5.5,
+        "impact_type": "front_corner"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "stop_sign_visible": true,
+        "type": "two_way_stop"
+      },
+      "unsupported_claims_to_check": [
+        "green car driver was distracted by children in backseat",
+        "bus driver was driving over the speed limit"
+      ],
+      "required_visible_events": [
+        "stop sign visible for green car",
+        "green car fails to stop completely",
+        "collision with transit bus"
+      ],
+      "reference_description": "A green sedan approaches an intersection governed by an octagonal stop sign. The sedan decelerates but does not come to a complete halt before crossing the stop line at 4.0 seconds. A through-traveling transit bus on the priority roadway strikes the front left quarter of the green sedan."
+    }
+  },
+  {
+    "video_id": "clip_06_insufficient_signal_obscured",
+    "clip_name": "obscured_signal_intersection",
+    "duration_sec": 11.0,
+    "fps": 30.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "daylight",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "black", "role": "vehicle_a"},
+        {"id": 2, "class": "car", "color": "silver", "role": "vehicle_b"}
+      ],
+      "events": [
+        {"event_type": "intersection_entry", "timestamp": 3.0, "description": "Both vehicles enter intersection simultaneously."},
+        {"event_type": "collision", "timestamp": 4.5, "description": "Collision at center of intersection."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 4.5,
+        "impact_type": "t_bone"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "signal_obscured_by_tree_canopy"
+      },
+      "unsupported_claims_to_check": [
+        "black car definitely had a red light",
+        "silver car had the right of way"
+      ],
+      "required_visible_events": [
+        "traffic signal is obscured or not in camera field of view",
+        "two vehicles collide in intersection",
+        "insufficient evidence to determine signal phase"
+      ],
+      "reference_description": "Two vehicles enter an intersection and collide at 4.5 seconds. The traffic control signal head is completely obscured by dense tree foliage and camera angle. It is visually impossible to determine which direction had a green or red signal."
+    }
+  },
+  {
+    "video_id": "clip_07_insufficient_off_camera_impact",
+    "clip_name": "parking_lot_perimeter_cctv",
+    "duration_sec": 10.0,
+    "fps": 15.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "night_cctv",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "car", "color": "dark_sedan", "role": "vehicle_exiting"},
+        {"id": 2, "class": "car", "color": "light_suv", "role": "vehicle_parked"}
+      ],
+      "events": [
+        {"event_type": "movement_toward_edge", "timestamp": 2.0, "description": "Dark sedan travels toward right edge of CCTV frame."},
+        {"event_type": "rebound_motion", "timestamp": 4.5, "description": "Dark sedan jerks backward and stops after passing edge of frame."}
+      ],
+      "collision": {
+        "occurred": true,
+        "timestamp": 4.3,
+        "impact_type": "off_camera"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "private_parking"
+      },
+      "unsupported_claims_to_check": [
+        "dark sedan struck a concrete pole",
+        "dark sedan struck a pedestrian"
+      ],
+      "required_visible_events": [
+        "actual contact point is outside camera frame",
+        "insufficient visual evidence of impacted object"
+      ],
+      "reference_description": "A dark sedan drives past the right edge of the camera view. A secondary jerk and vehicle vibration suggest a collision occurred beyond the field of view at approximately 4.3 seconds, but the impacted object is not visible on camera."
+    }
+  },
+  {
+    "video_id": "clip_08_no_accident_near_miss",
+    "clip_name": "highway_hard_braking_near_miss",
+    "duration_sec": 12.0,
+    "fps": 30.0,
+    "environment": {
+      "weather": "clear",
+      "lighting": "daylight",
+      "road_surface": "dry"
+    },
+    "ground_truth": {
+      "vehicles": [
+        {"id": 1, "class": "truck", "color": "red", "role": "braking_vehicle"},
+        {"id": 2, "class": "motorcycle", "color": "black", "role": "swerving_vehicle"}
+      ],
+      "events": [
+        {"event_type": "hard_braking", "timestamp": 3.0, "description": "Red truck slows rapidly."},
+        {"event_type": "swerve", "timestamp": 4.2, "description": "Motorcycle swerves onto paved shoulder to avoid truck."},
+        {"event_type": "safe_stop", "timestamp": 6.5, "description": "Both vehicles come to rest without physical contact."}
+      ],
+      "collision": {
+        "occurred": false,
+        "timestamp": null,
+        "impact_type": "none"
+      },
+      "traffic_controls": {
+        "signal_visible": false,
+        "type": "controlled_access"
+      },
+      "unsupported_claims_to_check": [
+        "motorcycle clipped rear bumper of truck",
+        "driver of truck brake checked intentionally"
+      ],
+      "required_visible_events": [
+        "no physical collision occurred",
+        "near-miss incident with evasive maneuver"
+      ],
+      "reference_description": "A red pickup truck brakes hard in lane 1. A following motorcycle executes an evasive swerve onto the right paved shoulder and comes to a controlled stop. No physical contact or impact occurred."
+    }
+  }
+]
+

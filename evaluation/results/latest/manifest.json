@@ -1,0 +1,101 @@
+{
+  "run_id": "run_20261028_183846",
+  "created_at_utc": "2026-10-28T18:38:46.019861+00:00",
+  "git": {
+    "commit": "7421b61b16ca0072a95174f5dcf34d09c285b16b",
+    "branch": "main",
+    "is_dirty": true
+  },
+  "environment": {
+    "python_version": "3.14.4 (tags/v3.14.4:23116f9, Apr  7 2026, 14:10:54) [MSC v.1944 64 bit (AMD64)]",
+    "python_executable": "E:\\Accident_Intel\\.venv\\Scripts\\python.exe",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "torch_version": "2.14.1+cpu",
+    "cuda_available": false,
+    "cuda_device": null
+  },
+  "datasets": [
+    {
+      "name": "ragas_testset",
+      "file_path": "evaluation/datasets/rag/ragas_testset.jsonl",
+      "sample_count": 54,
+      "sha256": "1d72eff80e0a390f881165b555fee4bf0d86e512a14ce3bc9c62e60bfb796d3b"
+    },
+    {
+      "name": "video_benchmark",
+      "file_path": "evaluation/datasets/video/video_benchmark.json",
+      "sample_count": 8,
+      "sha256": "4d171edb08f302f96e26abbed2da2d0fa4bf09bf8378df66a8e1947208353e00"
+    },
+    {
+      "name": "tracking_benchmark",
+      "file_path": "evaluation/datasets/tracking/tracking_benchmark.json",
+      "sample_count": 30,
+      "sha256": "ed025f802a003b1fb018591b1cb0d4ae97db263400141737a776ac6dee61c523"
+    },
+    {
+      "name": "reasoning_benchmark",
+      "file_path": "evaluation/datasets/reasoning/reasoning_benchmark.json",
+      "sample_count": 12,
+      "sha256": "45fecd1e2aa4a6968d56f23faac06ab7936dafc3de8bbf94f3a23d8c1ded10e8"
+    },
+    {
+      "name": "damage_benchmark",
+      "file_path": "evaluation/datasets/damage/damage_benchmark.json",
+      "sample_count": 10,
+      "sha256": "e03f14a1109bbdc947a3d31f3c7d4367d08865b94f30a428f51f12dd5e17ab57"
+    }
+  ],
+  "stages": {
+    "video_understanding": {
+      "status": "SUCCESS",
+      "sample_count": 8,
+      "duration_seconds": 0.002,
+      "reason": null
+    },
+    "vehicle_tracking": {
+      "status": "SUCCESS",
+      "sample_count": 30,
+      "duration_seconds": 0.002,
+      "reason": null
+    },
+    "rag_retrieval": {
+      "status": "SUCCESS",
+      "sample_count": 54,
+      "duration_seconds": 21.193,
+      "reason": null
+    },
+    "rag_generation": {
+      "status": "BLOCKED",
+      "sample_count": 0,
+      "duration_seconds": 0.0,
+      "reason": "Blocked: Missing external LLM provider credentials. End-to-end generation requires GROQ_API_KEY or OPENAI_API_KEY. Retrieval-only evaluation was executed independently."
+    },
+    "accident_reasoning": {
+      "status": "SUCCESS",
+      "sample_count": 12,
+      "duration_seconds": 0.001,
+      "reason": null
+    },
+    "damage_cost": {
+      "status": "SUCCESS",
+      "sample_count": 10,
+      "duration_seconds": 0.003,
+      "reason": null
+    },
+    "end_to_end": {
+      "status": "SUCCESS",
+      "sample_count": 45,
+      "duration_seconds": 0.207,
+      "reason": null
+    },
+    "comparisons": {
+      "status": "SUCCESS",
+      "sample_count": 25,
+      "duration_seconds": 4.789,
+      "reason": null
+    }
+  },
+  "models": {}
+}

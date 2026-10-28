@@ -6,6 +6,7 @@ import {
   Wrench,
   BookOpen,
   DollarSign,
+  FileCheck,
   Settings,
   ShieldAlert,
   X,
@@ -25,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Damage Estimator', href: '/damage', icon: Wrench },
   { label: 'Traffic Laws', href: '/laws', icon: BookOpen },
   { label: 'Cost Analysis', href: '/cost', icon: DollarSign },
+  { label: 'Evaluation', href: '/evaluation', icon: FileCheck },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
